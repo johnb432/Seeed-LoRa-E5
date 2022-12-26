@@ -37,7 +37,7 @@
 #include "flash_if.h"
 
 /* USER CODE BEGIN Includes */
-
+#include "string.h"
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
@@ -101,7 +101,7 @@ static const char *slotStrings[] = { "1", "2", "C", "C_MC", "P", "P_MC" };
 /**
   * @brief  LoRa End Node send request
   */
-static void SendTxData(void);
+uint8_t SendTxData(const char *waterLevel, const char *waterTemp, const char *waterEC, const char *waterSalinity, const char *waterTDS, const char *batteryLevel);
 
 /**
   * @brief  TX timer callback function
@@ -390,7 +390,6 @@ void LoRaWAN_Init(void)
 
   UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_LmHandlerProcess), UTIL_SEQ_RFU, LmHandlerProcess);
 
-  UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), UTIL_SEQ_RFU, SendTxData);
   UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_LoRaStoreContextEvent), UTIL_SEQ_RFU, StoreContext);
   UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_LoRaStopJoinEvent), UTIL_SEQ_RFU, StopJoin);
 
@@ -408,19 +407,6 @@ void LoRaWAN_Init(void)
   /* USER CODE END LoRaWAN_Init_2 */
 
   LmHandlerJoin(ActivationType, ForceRejoin);
-
-  if (EventType == TX_ON_TIMER)
-  {
-    /* send every time timer elapses */
-    UTIL_TIMER_Create(&TxTimer, TxPeriodicity, UTIL_TIMER_ONESHOT, OnTxTimerEvent, NULL);
-    UTIL_TIMER_Start(&TxTimer);
-  }
-  else
-  {
-    /* USER CODE BEGIN LoRaWAN_Init_3 */
-
-    /* USER CODE END LoRaWAN_Init_3 */
-  }
 
   /* USER CODE BEGIN LoRaWAN_Init_Last */
 
@@ -449,7 +435,22 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 /* Private functions ---------------------------------------------------------*/
 /* USER CODE BEGIN PrFD */
+// Pointer to measurement, pointer to dataCounter
+static void ExtractMeasurements(const char *measurement, uint8_t *dataCounter) {
+	char *ptrBuffer = strstr(measurement, "K06");		/* K06 is for command */
+	for (uint8_t i = 10; i <= 11; i++) {				/* Checking all date character and put in sender buffer */
+		if (*(ptrBuffer + i) != ' '){
+			AppData.Buffer[(*dataCounter)++] = *(ptrBuffer + i);
+		}
+	}
 
+	ptrBuffer = strstr(measurement, "K20");				/* K20 is for data */
+	for (uint8_t i = 11; i <= 17; i++) {				/* Checking all date character and put in sender buffer */
+		if (*(ptrBuffer + i) != ' '){
+			AppData.Buffer[(*dataCounter)++] = *(ptrBuffer + i);
+		}
+	}
+};
 /* USER CODE END PrFD */
 
 static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
@@ -533,117 +534,54 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
   /* USER CODE END OnRxData_1 */
 }
 
-static void SendTxData(void)
+uint8_t SendTxData(const char *waterLevel, const char *waterTemp, const char *waterEC, const char *waterSalinity, const char *waterTDS, const char *sensorBatteryLevel)
 {
-  /* USER CODE BEGIN SendTxData_1 */
-  LmHandlerErrorStatus_t status = LORAMAC_HANDLER_ERROR;
-  uint8_t batteryLevel = GetBatteryLevel();
-  sensor_t sensor_data;
-  UTIL_TIMER_Time_t nextTxIn = 0;
+	/* USER CODE BEGIN SendTxData_1 */
+	LmHandlerErrorStatus_t status = LORAMAC_HANDLER_ERROR;
+	//uint8_t batteryLevel = GetBatteryLevel();
+	uint8_t dataCounter = 0;
 
-#ifdef CAYENNE_LPP
-  uint8_t channel = 0;
-#else
-  uint16_t pressure = 0;
-  int16_t temperature = 0;
-  uint16_t humidity = 0;
-  uint32_t i = 0;
-  int32_t latitude = 0;
-  int32_t longitude = 0;
-  uint16_t altitudeGps = 0;
-#endif /* CAYENNE_LPP */
+	/* DATE in format ddmmyy */
+	char *ptrBuffer = strstr(waterLevel, "K28");	/* K28 is for date */
+	for (uint8_t i = 4; i <= 11; i++) { 			/* Get all date characters and put them in transmit buffer */
+		if (*(ptrBuffer + i) != ' ') {
+			AppData.Buffer[dataCounter++] = *(ptrBuffer + i);
+		}
+	}
 
-  EnvSensors_Read(&sensor_data);
+	/* TIME in format hhmmss */
+	ptrBuffer = strstr(waterLevel, "K22"); 			/* K22 is for time */
+	for (uint8_t i = 4; i <= 11; i++) { 			/* Get all time characters and put them in transmit buffer */
+		if (*(ptrBuffer + i) != ' ') {
+			AppData.Buffer[dataCounter++] = *(ptrBuffer + i);
+		}
+	}
 
-  APP_LOG(TS_ON, VLEVEL_M, "VDDA: %d\r\n", batteryLevel);
-  APP_LOG(TS_ON, VLEVEL_M, "temp: %d\r\n", (int16_t)(sensor_data.temperature));
+	/* Extract data from measurement strings */
+	ExtractMeasurements(waterLevel, &dataCounter);
+	ExtractMeasurements(waterTemp, &dataCounter);
+	ExtractMeasurements(waterEC, &dataCounter);
+	ExtractMeasurements(waterSalinity, &dataCounter);
+	ExtractMeasurements(waterTDS, &dataCounter);
+	ExtractMeasurements(sensorBatteryLevel, &dataCounter);
 
-  AppData.Port = LORAWAN_USER_APP_PORT;
+	//APP_LOG(TS_ON, VLEVEL_M, "VDDA: %d\r\n", batteryLevel);
 
-#ifdef CAYENNE_LPP
-  CayenneLppReset();
-  CayenneLppAddBarometricPressure(channel++, sensor_data.pressure);
-  CayenneLppAddTemperature(channel++, sensor_data.temperature);
-  CayenneLppAddRelativeHumidity(channel++, (uint16_t)(sensor_data.humidity));
+	AppData.Port = LORAWAN_USER_APP_PORT;
+	//AppData.Buffer[dataCounter++] = GetBatteryLevel();        /* 1 (very low) to 254 (fully charged) */
 
-  if ((LmHandlerParams.ActiveRegion != LORAMAC_REGION_US915) && (LmHandlerParams.ActiveRegion != LORAMAC_REGION_AU915)
-      && (LmHandlerParams.ActiveRegion != LORAMAC_REGION_AS923))
-  {
-    CayenneLppAddDigitalInput(channel++, GetBatteryLevel());
-    CayenneLppAddDigitalOutput(channel++, AppLedStateOn);
-  }
+	AppData.BufferSize = dataCounter;
 
-  CayenneLppCopy(AppData.Buffer);
-  AppData.BufferSize = CayenneLppGetSize();
-#else  /* not CAYENNE_LPP */
-  humidity    = (uint16_t)(sensor_data.humidity * 10);            /* in %*10     */
-  temperature = (int16_t)(sensor_data.temperature);
-  pressure = (uint16_t)(sensor_data.pressure * 100 / 10); /* in hPa / 10 */
+	/*if ((JoinLedTimer.IsRunning) && (LmHandlerJoinStatus() == LORAMAC_HANDLER_SET))
+	 {
+	 UTIL_TIMER_Stop(&JoinLedTimer);
+	 }*/
 
-  AppData.Buffer[i++] = AppLedStateOn;
-  AppData.Buffer[i++] = (uint8_t)((pressure >> 8) & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(pressure & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(temperature & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)((humidity >> 8) & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(humidity & 0xFF);
+	status = LmHandlerSend(&AppData, LmHandlerParams.IsTxConfirmed, false); /* Send data */
 
-  if ((LmHandlerParams.ActiveRegion == LORAMAC_REGION_US915) || (LmHandlerParams.ActiveRegion == LORAMAC_REGION_AU915)
-      || (LmHandlerParams.ActiveRegion == LORAMAC_REGION_AS923))
-  {
-    AppData.Buffer[i++] = 0;
-    AppData.Buffer[i++] = 0;
-    AppData.Buffer[i++] = 0;
-    AppData.Buffer[i++] = 0;
-  }
-  else
-  {
-    latitude = sensor_data.latitude;
-    longitude = sensor_data.longitude;
+	return status; /* return 1 if transmission is successful */
 
-    AppData.Buffer[i++] = GetBatteryLevel();        /* 1 (very low) to 254 (fully charged) */
-    AppData.Buffer[i++] = (uint8_t)((latitude >> 16) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((latitude >> 8) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)(latitude & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((longitude >> 16) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((longitude >> 8) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)(longitude & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)((altitudeGps >> 8) & 0xFF);
-    AppData.Buffer[i++] = (uint8_t)(altitudeGps & 0xFF);
-  }
-
-  AppData.BufferSize = i;
-#endif /* CAYENNE_LPP */
-
-  if ((JoinLedTimer.IsRunning) && (LmHandlerJoinStatus() == LORAMAC_HANDLER_SET))
-  {
-    UTIL_TIMER_Stop(&JoinLedTimer);
-#if 0   // XXX:
-    HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_RESET); /* LED_RED */
-#endif
-  }
-
-  status = LmHandlerSend(&AppData, LmHandlerParams.IsTxConfirmed, false);
-  if (LORAMAC_HANDLER_SUCCESS == status)
-  {
-    APP_LOG(TS_ON, VLEVEL_L, "SEND REQUEST\r\n");
-  }
-  else if (LORAMAC_HANDLER_DUTYCYCLE_RESTRICTED == status)
-  {
-    nextTxIn = LmHandlerGetDutyCycleWaitTime();
-    if (nextTxIn > 0)
-    {
-      APP_LOG(TS_ON, VLEVEL_L, "Next Tx in  : ~%d second(s)\r\n", (nextTxIn / 1000));
-    }
-  }
-
-  if (EventType == TX_ON_TIMER)
-  {
-    UTIL_TIMER_Stop(&TxTimer);
-    UTIL_TIMER_SetPeriod(&TxTimer, MAX(nextTxIn, TxPeriodicity));
-    UTIL_TIMER_Start(&TxTimer);
-  }
-
-  /* USER CODE END SendTxData_1 */
+	/* USER CODE END SendTxData_1 */
 }
 
 static void OnTxTimerEvent(void *context)
@@ -651,12 +589,8 @@ static void OnTxTimerEvent(void *context)
   /* USER CODE BEGIN OnTxTimerEvent_1 */
 
   /* USER CODE END OnTxTimerEvent_1 */
-  UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
 
-  /*Wait for next tx slot*/
-  UTIL_TIMER_Start(&TxTimer);
   /* USER CODE BEGIN OnTxTimerEvent_2 */
-
   /* USER CODE END OnTxTimerEvent_2 */
 }
 
@@ -992,4 +926,3 @@ static void OnRestoreContextRequest(void *nvm, uint32_t nvm_size)
 
   /* USER CODE END OnRestoreContextRequest_Last */
 }
-

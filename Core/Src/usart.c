@@ -25,6 +25,7 @@
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart1;
+IRDA_HandleTypeDef hirda2;
 DMA_HandleTypeDef hdma_usart1_tx;
 
 /* USART1 init function */
@@ -69,6 +70,35 @@ void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
+
+}
+/* USART2 init function */
+
+void MX_USART2_IRDA_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  hirda2.Instance = USART2;
+  hirda2.Init.BaudRate = 57600;
+  hirda2.Init.WordLength = IRDA_WORDLENGTH_8B;
+  hirda2.Init.Parity = IRDA_PARITY_NONE;
+  hirda2.Init.Mode = IRDA_MODE_TX_RX;
+  hirda2.Init.Prescaler = 1;
+  hirda2.Init.PowerMode = IRDA_POWERMODE_NORMAL;
+  hirda2.Init.ClockPrescaler = IRDA_PRESCALER_DIV1;
+  if (HAL_IRDA_Init(&hirda2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
 
 }
 
@@ -134,6 +164,50 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
   }
 }
 
+void HAL_IRDA_MspInit(IRDA_HandleTypeDef* irdaHandle)
+{
+
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+  if(irdaHandle->Instance==USART2)
+  {
+  /* USER CODE BEGIN USART2_MspInit 0 */
+
+  /* USER CODE END USART2_MspInit 0 */
+
+  /** Initializes the peripherals clocks
+  */
+    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_USART2;
+    PeriphClkInitStruct.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    /* USART2 clock enable */
+    __HAL_RCC_USART2_CLK_ENABLE();
+
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    /**USART2 GPIO Configuration
+    PA3     ------> USART2_RX
+    PA2     ------> USART2_TX
+    */
+    GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_2;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    /* USART2 interrupt Init */
+    HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(USART2_IRQn);
+  /* USER CODE BEGIN USART2_MspInit 1 */
+
+  /* USER CODE END USART2_MspInit 1 */
+  }
+}
+
 void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
 {
 
@@ -159,6 +233,31 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
   /* USER CODE BEGIN USART1_MspDeInit 1 */
 
   /* USER CODE END USART1_MspDeInit 1 */
+  }
+}
+
+void HAL_IRDA_MspDeInit(IRDA_HandleTypeDef* irdaHandle)
+{
+
+  if(irdaHandle->Instance==USART2)
+  {
+  /* USER CODE BEGIN USART2_MspDeInit 0 */
+
+  /* USER CODE END USART2_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __HAL_RCC_USART2_CLK_DISABLE();
+
+    /**USART2 GPIO Configuration
+    PA3     ------> USART2_RX
+    PA2     ------> USART2_TX
+    */
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_3|GPIO_PIN_2);
+
+    /* USART2 interrupt Deinit */
+    HAL_NVIC_DisableIRQ(USART2_IRQn);
+  /* USER CODE BEGIN USART2_MspDeInit 1 */
+
+  /* USER CODE END USART2_MspDeInit 1 */
   }
 }
 

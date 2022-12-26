@@ -58,6 +58,7 @@ void SysTick_Handler(void);
 void TAMP_STAMP_LSECSS_SSRU_IRQHandler(void);
 void DMA1_Channel1_IRQHandler(void);
 void USART1_IRQHandler(void);
+void USART2_IRQHandler(void);
 void EXTI15_10_IRQHandler(void);
 void RTC_Alarm_IRQHandler(void);
 void SUBGHZ_Radio_IRQHandler(void);

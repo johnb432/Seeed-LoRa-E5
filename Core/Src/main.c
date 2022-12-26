@@ -19,11 +19,14 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "app_lorawan.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "stdbool.h"
+#include "sys_app.h"
+#include "stm32_timer.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,6 +57,67 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+bool messageReceived = false;
+bool messageReceivedFull = false;
+bool messageTransmitted = false;
+bool error = false;
+
+UTIL_TIMER_Object_t ReceiveTimeout;
+
+uint8_t reception[1];
+
+uint8_t rxBuffer[256] = {'\0'};
+uint8_t rxPointer = 0;
+
+void HAL_IRDA_RxCpltCallback(IRDA_HandleTypeDef *hirda) {
+	messageReceived = true;
+	messageReceivedFull = true; // Remove when ready to test with more chars
+}
+
+extern void HAL_IRDA_TxCpltCallback(IRDA_HandleTypeDef *hirda) {
+	messageTransmitted = true;
+}
+
+extern void HAL_IRDA_ErrorCallback(IRDA_HandleTypeDef *hirda) {
+	error = true;
+}
+
+void IRDA_messageReceveivedFull() {
+	messageReceivedFull = true;
+}
+
+/*
+ * This function calculates the checksum of a given message.
+ * Message includes "\r" at end of the transmission.
+ */
+bool IRDA_checksum(const char *message) {
+	uint8_t messageLength = strlen(message);
+
+	if (message[messageLength - 1] != '\r') {
+		return false;
+	}
+
+	// Get checksum from message (convert from ASCII to binary)
+	// Checksum is sent in ASCII format (e.g "5288" -> 5288 in decimal)
+	uint16_t checksumRead = (((uint16_t) message[messageLength - 7]) - 0x0030) * 1000;
+	checksumRead += (((uint16_t) message[messageLength - 6]) - 0x0030) * 100;
+	checksumRead += (((uint16_t) message[messageLength - 5]) - 0x0030) * 10;
+	checksumRead += ((uint16_t) message[messageLength - 4]) - 0x0030;
+
+	uint16_t checksumCalculated = 0;
+
+	// Skip over checksum characters
+	for (uint8_t i = 0; i < messageLength - 10; i++) {
+		checksumCalculated += message[i];
+	}
+
+	// Replace checksum within message with spaces
+	checksumCalculated += 8 * 0x0020 + message[messageLength - 2];
+
+	APP_LOG(TS_ON, VLEVEL_M, "Checksum Read: %d | Calculated: %d\r\n", checksumRead, checksumCalculated);
+
+	return checksumRead == checksumCalculated;
+}
 
 /* USER CODE END 0 */
 
@@ -86,14 +150,71 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_LoRaWAN_Init();
+  MX_USART2_IRDA_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  //UTIL_TIMER_Create(&ReceiveTimeout, 1, UTIL_TIMER_ONESHOT, IRDA_messageReceveivedFull, NULL);
+
+  HAL_IRDA_Receive_IT(&hirda2, reception, sizeof(reception));
+
+  APP_LOG(TS_ON, VLEVEL_M, "IRDA IDLE INTERRUPT ENABLED: %d", __HAL_IRDA_GET_IT_SOURCE(&hirda2, IRDA_IT_IDLE));
+
   while (1)
   {
+	if (messageReceived) {
+		messageReceived = false;
+
+		//__HAL_IRDA_FLUSH_DRREGISTER(&hirda2);
+		//SET_BIT((&hirda2)->Instance->RQR, IRDA_RXDATA_FLUSH_REQUEST);
+		//// Nearly the same as the above, but below has a casting to uint16_t
+		//__HAL_IRDA_SEND_REQ(&hirda2, IRDA_RXDATA_FLUSH_REQUEST);
+
+		//rxBuffer[rxPointer++] = reception[0];
+
+		//// Reset timeout timer
+		//UTIL_TIMER_Stop(&ReceiveTimeout);
+		//UTIL_TIMER_Start(&ReceiveTimeout);
+	}
+
+	if (messageReceivedFull) {
+		messageReceivedFull = false;
+
+		/*
+		char measurement[] = "Test";
+
+		if (strstr(measurement, "K23") != NULL) {
+			IRDA_checksum(measurement);
+		}
+		*/
+
+		//UTIL_TIMER_Stop(&ReceiveTimeout);
+
+		APP_LOG(TS_ON, VLEVEL_M, "MESSAGE RECEIVED: %", reception[0]);
+
+		HAL_IRDA_Transmit_IT(&hirda2, reception, sizeof(reception));
+		//HAL_IRDA_Transmit_IT(&hirda2, rxBuffer, rxPointer);
+		HAL_IRDA_Receive_IT(&hirda2, reception, sizeof(reception));
+	}
+
+	if (messageTransmitted) {
+		messageTransmitted = false;
+		APP_LOG(TS_ON, VLEVEL_M, "MESSAGE TRANSMITTED");
+	}
+
+	if (error) {
+		APP_LOG(TS_ON, VLEVEL_M, "IRDA CALLBACK ERROR: %d", hirda2.ErrorCode);
+
+		//__HAL_IRDA_CLEAR_OREFLAG(&hirda2);
+
+		//uint8_t isLineClearFlagTriggered = __HAL_IRDA_GET_IT(&hirda2, IRDA_IT_IDLE);
+		//uint8_t isLineClearFlagEnabled = __HAL_IRDA_GET_IT_SOURCE(&hirda2, IRDA_IT_IDLE);
+	}
+
     /* USER CODE END WHILE */
     MX_LoRaWAN_Process();
 
