@@ -550,7 +550,7 @@ uint8_t SendTxData(const char *waterLevel, const char *waterTemp, const char *wa
 	}
 
 	/* TIME in format hhmmss */
-	ptrBuffer = strstr(waterLevel, "K22"); 			/* K22 is for time */
+	ptrBuffer = strstr(waterLevel, "K24"); 			/* K24 is for time */
 	for (uint8_t i = 4; i <= 11; i++) { 			/* Get all time characters and put them in transmit buffer */
 		if (*(ptrBuffer + i) != ' ') {
 			AppData.Buffer[dataCounter++] = *(ptrBuffer + i);

@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "app_lorawan.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -57,41 +58,86 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-bool messageReceived = false;
-bool messageReceivedFull = false;
-bool messageTransmitted = false;
-bool error = false;
+static bool messageTransmitted = false;
+static bool error = false;
 
-UTIL_TIMER_Object_t ReceiveTimeout;
+static bool startMeasurement = false;
 
-uint8_t reception[1];
+static UTIL_TIMER_Object_t MeasurementTimer;
+static UTIL_TIMER_Object_t wakeSensorUpTimer;
 
-uint8_t rxBuffer[256] = {'\0'};
-uint8_t rxPointer = 0;
+static uint8_t rxBuffer[256] = {0xFF};
+static uint8_t rxPointer = 0;
 
-void HAL_IRDA_RxCpltCallback(IRDA_HandleTypeDef *hirda) {
-	messageReceived = true;
-	messageReceivedFull = true; // Remove when ready to test with more chars
+static uint8_t reception[1] = {0xFF};
+
+// Buffer for whole measurement frames
+static char waterLevel[115];
+static char waterTemp[115];
+static char waterEC[115];
+static char waterSalinity[115];
+static char waterTDS[115];
+static char batteryLevel[115];
+
+static bool IRDA_Receive(IRDA_HandleTypeDef *hirda) {
+	// Wait for 10 ms to see if anything else has been sent
+	switch (HAL_IRDA_Receive(hirda, reception, sizeof(reception), 10)) {
+		// Reception is complete
+		case HAL_TIMEOUT: {
+			return true;
+		}
+		case HAL_OK: {
+			rxBuffer[rxPointer++] = reception[0];
+			break;
+		}
+		default: {}
+	}
+
+	return false;
 }
 
-extern void HAL_IRDA_TxCpltCallback(IRDA_HandleTypeDef *hirda) {
+/*
+void HAL_IRDA_RxCpltCallback(IRDA_HandleTypeDef *hirda) {
+	// Reset the counting value of the timer
+	__HAL_TIM_SET_COUNTER(&htim16, (uint16_t) 0);
+
+	// Restart the timer (if it hasn't already been started)
+	HAL_TIM_Base_Start_IT(&htim16);
+}
+
+void HAL_IRDA_TxCpltCallback(IRDA_HandleTypeDef *hirda) {
 	messageTransmitted = true;
 }
 
-extern void HAL_IRDA_ErrorCallback(IRDA_HandleTypeDef *hirda) {
+void HAL_IRDA_ErrorCallback(IRDA_HandleTypeDef *hirda) {
 	error = true;
 }
 
-void IRDA_messageReceveivedFull() {
-	messageReceivedFull = true;
+// Notifies when a reception is complete
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+	messageReceived = true;
+}
+*/
+static void StartMeasurement(void) {
+	startMeasurement = true;
+}
+
+static void WakeSensorUp(void) {
+	uint8_t messageSend[] = "A\r";
+
+	HAL_IRDA_Transmit(&hirda2, messageSend, sizeof(messageSend) - 1, 100);
 }
 
 /*
  * This function calculates the checksum of a given message.
  * Message includes "\r" at end of the transmission.
  */
-bool IRDA_checksum(const char *message) {
+static bool IRDA_checksum(const char *message) {
 	uint8_t messageLength = strlen(message);
+
+	if (message[messageLength - 1] != '\r') {
+		return false;
+	}
 
 	// Get checksum from message (convert from ASCII to binary)
 	// Checksum is sent in ASCII format (e.g "5288" -> 5288 in decimal)
@@ -107,7 +153,7 @@ bool IRDA_checksum(const char *message) {
 		checksumCalculated += message[i];
 	}
 
-	// Add space instead of checksum
+	// Replace checksum within message with spaces
 	checksumCalculated += 8 * 0x0020 + message[messageLength - 2];
 
 	APP_LOG(TS_ON, VLEVEL_M, "Checksum Read: %d | Calculated: %d\r\n", checksumRead, checksumCalculated);
@@ -133,7 +179,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  //uint8_t sizes[] = {4};
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -147,6 +193,7 @@ int main(void)
   MX_GPIO_Init();
   MX_LoRaWAN_Init();
   MX_USART2_IRDA_Init();
+  MX_TIM16_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -154,57 +201,163 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  //UTIL_TIMER_Create(&ReceiveTimeout, 1, UTIL_TIMER_ONESHOT, IRDA_messageReceveivedFull, NULL);
+  // Create a timer that handles measurement taking
+  UTIL_TIMER_Create(&MeasurementTimer, 30000, UTIL_TIMER_PERIODIC, StartMeasurement, NULL);
+  UTIL_TIMER_Create(&wakeSensorUpTimer, 200, UTIL_TIMER_PERIODIC, WakeSensorUp, NULL);
 
-  HAL_IRDA_Receive_IT(&hirda2, reception, sizeof(reception));
+  startMeasurement = true;
 
-  APP_LOG(TS_ON, VLEVEL_M, "IRDA IDLE INTERRUPT ENABLED: %d", __HAL_IRDA_GET_IT_SOURCE(&hirda2, IRDA_IT_IDLE));
+  // Just to be safe, flush the RX and TX buffers
+  __HAL_IRDA_FLUSH_DRREGISTER(&hirda2);
+
+  //HAL_IRDA_Receive_IT(&hirda2, rxBuffer, sizeof(rxBuffer));
 
   while (1)
   {
-	if (messageReceived) {
-		messageReceived = false;
+	//HAL_TIM_IRQHandler(&htim16);
 
-		//__HAL_IRDA_FLUSH_DRREGISTER(&hirda2);
-		//SET_BIT((&hirda2)->Instance->RQR, IRDA_RXDATA_FLUSH_REQUEST);
-		//// Nearly the same as the above, but below has a casting to uint16_t
-		//__HAL_IRDA_SEND_REQ(&hirda2, IRDA_RXDATA_FLUSH_REQUEST);
+	if (startMeasurement) {
+		LmHandlerHalt();
 
-		//rxBuffer[rxPointer++] = reception[0];
+		//UTIL_TIMER_Start(&wakeSensorUpTimer);
 
-		//// Reset timeout timer
-		//UTIL_TIMER_Stop(&ReceiveTimeout);
-		//UTIL_TIMER_Start(&ReceiveTimeout);
-	}
+		while (true) {
+			if (IRDA_Receive(&hirda2)) {
+				//HAL_TIM_Base_Stop_IT(&htim16);
 
-	if (messageReceivedFull) {
-		messageReceivedFull = false;
+				/*
+				char measurement[] = "Test";
 
-		//UTIL_TIMER_Stop(&ReceiveTimeout);
+				if (strstr(measurement, "K23") != NULL) {
+					IRDA_checksum(measurement);
+				}
+				*/
 
-		APP_LOG(TS_ON, VLEVEL_M, "MESSAGE RECEIVED: %", reception[0]);
+				//__HAL_IRDA_FLUSH_DRREGISTER(&hirda2);
 
-		HAL_IRDA_Transmit_IT(&hirda2, reception, sizeof(reception));
-		//HAL_IRDA_Transmit_IT(&hirda2, rxBuffer, rxPointer);
-		HAL_IRDA_Receive_IT(&hirda2, reception, sizeof(reception));
-	}
+				//rxPointer = sizeof(rxBuffer) - hirda2.RxXferCount - 1;
 
-	if (messageTransmitted) {
-		messageTransmitted = false;
-		APP_LOG(TS_ON, VLEVEL_M, "MESSAGE TRANSMITTED");
-	}
+				if (rxPointer != 0) {
+					//__HAL_IRDA_FLUSH_DRREGISTER(&hirda2);
 
-	if (error) {
-		APP_LOG(TS_ON, VLEVEL_M, "IRDA CALLBACK ERROR: %d", hirda2.ErrorCode);
+					char receiveString[rxPointer + 1];
 
-		//__HAL_IRDA_CLEAR_OREFLAG(&hirda2);
+					strncpy(receiveString, rxBuffer, rxPointer);
+					// String must end with a NULL char
+					receiveString[rxPointer] = '\0';
 
-		//uint8_t isLineClearFlagTriggered = __HAL_IRDA_GET_IT(&hirda2, IRDA_IT_IDLE);
-		//uint8_t isLineClearFlagEnabled = __HAL_IRDA_GET_IT_SOURCE(&hirda2, IRDA_IT_IDLE);
+					APP_LOG(TS_ON, VLEVEL_M, receiveString/*"MESSAGE RECEIVED\r\n"*/);
+					APP_LOG(TS_OFF, VLEVEL_M, "\r\n");
+
+					//HAL_IRDA_Transmit_IT(&hirda2, rxBuffer, rxPointer);
+
+					rxPointer = 0;
+				}
+
+				/*
+				// Get received content in string form, so that it can be compared
+				char receiveString[rxPointer];
+
+				strncpy(receiveString, rxBuffer, rxPointer);
+
+				// If message contains checksum
+				if (strstr(receiveString, "K23") != NULL && !IRDA_checksum(receiveString, rxPointer)) {
+					//ADD CODE FOR CHECKSUM IF FAILURE
+				}
+
+				// Once woken up, sensor will ask "what function" with "08?\r"
+				if (!strcmp(receiveString, "?08\r")) {
+					// Stop timer
+					UTIL_TIMER_Stop(&wakeUpSendTimer);
+
+					// Send request
+					uint8_t messageSend[] = "S\r";
+
+					HAL_IRDA_Transmit(&hirda1, messageSend, sizeof(messageSend) - 1, 50);
+
+					message = MESSAGE_START;
+
+					rxPointer = 0;
+				} else if (!strcmp(receiveString, "*\r")) {
+					// Acknowledge that there is a send request ("S")
+					if (message == MESSAGE_START) {
+						// Send first register value request
+						uint8_t messageSend[] = "F0017G0010\r";
+
+						HAL_IRDA_Transmit(&hirda1, messageSend, sizeof(messageSend) - 1, 50);
+					}
+
+					// Acknowledge the end of transmission ("A", Abbruch)
+					if (message == MESSAGE_END) {
+						// Done, can go back to sleep
+						uint8_t status = SendTxData(waterLevel, waterTemp, waterEC, waterSalinity, waterTDS, batteryLevel);
+
+						//HAL_RTC_
+						//HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+					}
+				} else if (!strncmp(receiveString, "K85 00170010", 12)) {
+					// Register value requests
+					uint8_t messageSend[] = "F0017G0020\r";
+
+					HAL_IRDA_Transmit(&hirda1, messageSend, sizeof(messageSend) - 1, 50);
+
+					strncpy(waterLevel, receiveString, strlen(receiveString) - 1);
+				} else if (!strncmp(receiveString, "K85 00170020", 12)) {
+					uint8_t messageSend[] = "F0017G0030\r";
+
+					HAL_IRDA_Transmit(&hirda1, messageSend, sizeof(messageSend) - 1, 50);
+
+					strncpy(waterTemp, receiveString, strlen(receiveString) - 1);
+				} else if (!strncmp(receiveString, "K85 00170030", 12)) {
+					uint8_t messageSend[] = "F0017G0035\r";
+
+					HAL_IRDA_Transmit(&hirda1, messageSend, sizeof(messageSend) - 1, 50);
+
+					strncpy(waterEC, receiveString, strlen(receiveString) - 1);
+				} else if (!strncmp(receiveString, "K85 00170035", 12)) {
+					uint8_t messageSend[] = "F0017G0036\r";
+
+					HAL_IRDA_Transmit(&hirda1, messageSend, sizeof(messageSend) - 1, 50);
+
+					strncpy(waterSalinity, receiveString, strlen(receiveString) - 1);
+				} else if (!strncmp(receiveString, "K85 00170036", 12)) {
+					message = MESSAGE_END;
+
+					uint8_t messageSend[] = "F0017G0090\r";
+
+					HAL_IRDA_Transmit(&hirda1, messageSend, sizeof(messageSend) - 1, 50);
+
+					strncpy(waterTDS, receiveString, strlen(receiveString) - 1);
+				} else if (!strncmp(receiveString, "K85 00170090", 12)) {
+					// Last register value request
+					uint8_t messageSend[] = "A\r";
+
+					HAL_IRDA_Transmit(&hirda1, messageSend, sizeof(messageSend) - 1, 50);
+
+					strncpy(batteryLevel, receiveString, strlen(receiveString) - 1);
+				} else {
+					//////////////Not awaited reception handling goes here
+
+					if (rxPointer != 0) {
+
+					}
+				}*/
+			}
+
+			if (messageTransmitted) {
+				messageTransmitted = false;
+				APP_LOG(TS_ON, VLEVEL_M, "MESSAGE TRANSMITTED\r\n");
+			}
+
+			if (error) {
+				error = false;
+				APP_LOG(TS_ON, VLEVEL_M, "IRDA CALLBACK ERROR: %d\r\n", hirda2.ErrorCode);
+			}
+		}
 	}
 
     /* USER CODE END WHILE */
-    MX_LoRaWAN_Process();
+	//MX_LoRaWAN_Process();
 
     /* USER CODE BEGIN 3 */
   }

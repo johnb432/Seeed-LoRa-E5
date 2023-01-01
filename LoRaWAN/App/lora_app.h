@@ -28,7 +28,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "platform.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -134,7 +134,7 @@ extern "C" {
 void LoRaWAN_Init(void);
 
 /* USER CODE BEGIN EFP */
-
+uint8_t SendTxData(const char *waterLevel, const char *waterTemp, const char *waterEC, const char *waterSalinity, const char *waterTDS, const char *batteryLevel);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus
