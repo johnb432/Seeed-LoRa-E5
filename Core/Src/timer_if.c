@@ -376,7 +376,7 @@ void TIMER_IF_DelayMs(uint32_t delay)
 void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc)
 {
   /* USER CODE BEGIN HAL_RTC_AlarmAEventCallback */
-
+  // Add code to make measurements?
   /* USER CODE END HAL_RTC_AlarmAEventCallback */
   UTIL_TIMER_IRQ_MAP_PROCESS();
   /* USER CODE BEGIN HAL_RTC_AlarmAEventCallback_Last */

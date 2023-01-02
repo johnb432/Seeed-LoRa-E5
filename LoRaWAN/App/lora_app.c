@@ -101,7 +101,7 @@ static const char *slotStrings[] = { "1", "2", "C", "C_MC", "P", "P_MC" };
 /**
   * @brief  LoRa End Node send request
   */
-uint8_t SendTxData(const char *waterLevel, const char *waterTemp, const char *waterEC, const char *waterSalinity, const char *waterTDS, const char *batteryLevel);
+uint8_t SendTxData(const char *measurementTime, const char *waterLevel, const char *waterTemp, const char *waterEC, const char *waterSalinity, const char *waterTDS, const char *batteryLevel);
 
 /**
   * @brief  TX timer callback function
@@ -435,22 +435,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 /* Private functions ---------------------------------------------------------*/
 /* USER CODE BEGIN PrFD */
-// Pointer to measurement, pointer to dataCounter
-static void ExtractMeasurements(const char *measurement, uint8_t *dataCounter) {
-	char *ptrBuffer = strstr(measurement, "K06");		/* K06 is for command */
-	for (uint8_t i = 10; i <= 11; i++) {				/* Checking all date character and put in sender buffer */
-		if (*(ptrBuffer + i) != ' '){
-			AppData.Buffer[(*dataCounter)++] = *(ptrBuffer + i);
-		}
-	}
 
-	ptrBuffer = strstr(measurement, "K20");				/* K20 is for data */
-	for (uint8_t i = 11; i <= 17; i++) {				/* Checking all date character and put in sender buffer */
-		if (*(ptrBuffer + i) != ' '){
-			AppData.Buffer[(*dataCounter)++] = *(ptrBuffer + i);
-		}
-	}
-};
 /* USER CODE END PrFD */
 
 static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
@@ -534,36 +519,49 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
   /* USER CODE END OnRxData_1 */
 }
 
-uint8_t SendTxData(const char *waterLevel, const char *waterTemp, const char *waterEC, const char *waterSalinity, const char *waterTDS, const char *sensorBatteryLevel)
+uint8_t SendTxData(const char *measurementTime, const char *waterLevel, const char *waterTemp, const char *waterEC, const char *waterSalinity, const char *waterTDS, const char *sensorBatteryLevel)
 {
 	/* USER CODE BEGIN SendTxData_1 */
 	LmHandlerErrorStatus_t status = LORAMAC_HANDLER_ERROR;
 	//uint8_t batteryLevel = GetBatteryLevel();
 	uint8_t dataCounter = 0;
 
-	/* DATE in format ddmmyy */
-	char *ptrBuffer = strstr(waterLevel, "K28");	/* K28 is for date */
-	for (uint8_t i = 4; i <= 11; i++) { 			/* Get all date characters and put them in transmit buffer */
-		if (*(ptrBuffer + i) != ' ') {
-			AppData.Buffer[dataCounter++] = *(ptrBuffer + i);
-		}
-	}
-
-	/* TIME in format hhmmss */
-	ptrBuffer = strstr(waterLevel, "K24"); 			/* K24 is for time */
-	for (uint8_t i = 4; i <= 11; i++) { 			/* Get all time characters and put them in transmit buffer */
-		if (*(ptrBuffer + i) != ' ') {
-			AppData.Buffer[dataCounter++] = *(ptrBuffer + i);
-		}
-	}
-
 	/* Extract data from measurement strings */
+	for (uint8_t i = 0; i < sizeof(measurementTime); i++) {
+		AppData.Buffer[dataCounter++] = measurementTime[i];
+	}
+
+	for (uint8_t i = 0; i < sizeof(waterLevel); i++) {
+		AppData.Buffer[dataCounter++] = waterLevel[i];
+	}
+
+	for (uint8_t i = 0; i < sizeof(waterTemp); i++) {
+		AppData.Buffer[dataCounter++] = waterTemp[i];
+	}
+
+	for (uint8_t i = 0; i < sizeof(waterEC); i++) {
+		AppData.Buffer[dataCounter++] = waterEC[i];
+	}
+
+	for (uint8_t i = 0; i < sizeof(waterSalinity); i++) {
+		AppData.Buffer[dataCounter++] = waterSalinity[i];
+	}
+
+	for (uint8_t i = 0; i < sizeof(waterTDS); i++) {
+		AppData.Buffer[dataCounter++] = waterTDS[i];
+	}
+
+	for (uint8_t i = 0; i < sizeof(sensorBatteryLevel); i++) {
+		AppData.Buffer[dataCounter++] = sensorBatteryLevel[i];
+	}
+	/*
 	ExtractMeasurements(waterLevel, &dataCounter);
 	ExtractMeasurements(waterTemp, &dataCounter);
 	ExtractMeasurements(waterEC, &dataCounter);
 	ExtractMeasurements(waterSalinity, &dataCounter);
 	ExtractMeasurements(waterTDS, &dataCounter);
 	ExtractMeasurements(sensorBatteryLevel, &dataCounter);
+	*/
 
 	//APP_LOG(TS_ON, VLEVEL_M, "VDDA: %d\r\n", batteryLevel);
 
