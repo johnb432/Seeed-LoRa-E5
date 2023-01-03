@@ -245,7 +245,7 @@ int main(void)
 					uint8_t messageSend[] = "A\r";
 
 					while (HAL_OK != HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 10)) {}
-				} else if (wakeUpCounter > 20) {
+				} else if (wakeUpCounter > 30) {
 					wakeUpCounter = 0;
 				}
 			}
@@ -268,6 +268,9 @@ int main(void)
 				// If message contains checksum
 				if (strstr(receiveString, "K23") != NULL && !IRDA_checksum(receiveString)) {
 					//ADD CODE FOR CHECKSUM IF FAILURE
+					uint8_t messageSend[] = "?06\r";
+
+					while (HAL_OK != HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 10)) {}
 				}
 
 				// Once woken up, sensor will ask "what function" with "08?\r"
@@ -284,7 +287,7 @@ int main(void)
 
 					wakeUpCounter = 0;
 
-					rxPointer = 0;
+					//rxPointer = 0;
 				} else if (!strcmp(receiveString, "*\r")) {
 					// Acknowledge that there is a send request ("S")
 					if (message == MESSAGE_START) {
