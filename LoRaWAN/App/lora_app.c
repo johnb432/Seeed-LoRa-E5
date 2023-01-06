@@ -37,7 +37,7 @@
 #include "flash_if.h"
 
 /* USER CODE BEGIN Includes */
-#include "string.h"
+#include "sensor_app.h"
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
@@ -101,13 +101,7 @@ static const char *slotStrings[] = { "1", "2", "C", "C_MC", "P", "P_MC" };
 /**
   * @brief  LoRa End Node send request
   */
-uint8_t SendTxData(const char *waterLevel, const char *waterTemp, const char *waterEC, const char *waterSalinity, const char *waterTDS, const char *batteryLevel);
-
-/**
-  * @brief  TX timer callback function
-  * @param  context ptr of timer context
-  */
-static void OnTxTimerEvent(void *context);
+bool SendTxData(const char *measurementExtracted);
 
 /**
   * @brief  join event callback function
@@ -313,11 +307,6 @@ static uint8_t AppDataBuffer[LORAWAN_APP_DATA_BUFFER_MAX_SIZE];
 static LmHandlerAppData_t AppData = { 0, 0, AppDataBuffer };
 
 /**
-  * @brief Specifies the state of the application LED
-  */
-static uint8_t AppLedStateOn = RESET;
-
-/**
   * @brief Timer to handle the application Tx Led to toggle
   */
 static UTIL_TIMER_Object_t TxLedTimer;
@@ -435,22 +424,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 /* Private functions ---------------------------------------------------------*/
 /* USER CODE BEGIN PrFD */
-// Pointer to measurement, pointer to dataCounter
-static void ExtractMeasurements(const char *measurement, uint8_t *dataCounter) {
-	char *ptrBuffer = strstr(measurement, "K06");		/* K06 is for command */
-	for (uint8_t i = 10; i <= 11; i++) {				/* Checking all date character and put in sender buffer */
-		if (*(ptrBuffer + i) != ' '){
-			AppData.Buffer[(*dataCounter)++] = *(ptrBuffer + i);
-		}
-	}
 
-	ptrBuffer = strstr(measurement, "K20");				/* K20 is for data */
-	for (uint8_t i = 11; i <= 17; i++) {				/* Checking all date character and put in sender buffer */
-		if (*(ptrBuffer + i) != ' '){
-			AppData.Buffer[(*dataCounter)++] = *(ptrBuffer + i);
-		}
-	}
-};
 /* USER CODE END PrFD */
 
 static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
@@ -502,25 +476,42 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
               }
               break;
             case LORAWAN_USER_APP_PORT:
-              if (appData->BufferSize == 1)
-              {
-                AppLedStateOn = appData->Buffer[0] & 0x01;
-                if (AppLedStateOn == RESET)
-                {
-                  APP_LOG(TS_OFF, VLEVEL_H, "LED OFF\r\n");
-                  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET); /* LED_RED */
-                }
-                else
-                {
-                  APP_LOG(TS_OFF, VLEVEL_H, "LED ON\r\n");
-                  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET); /* LED_RED */
-                }
-              }
-              break;
+				if (appData->BufferSize >= 2) {
+					APP_LOG(TS_OFF, VLEVEL_M, "Received data: %d %d\r\n", appData->Buffer[0], appData->Buffer[1]);
 
+					switch (appData->Buffer[0]) {
+						case LORA_TIMER_INTERVAL_MINS: {
+							uint8_t interval = appData->Buffer[1];
+
+							// TODO: Look at entire buffer
+
+							if (interval >= MINIMUM_TIMER_INTERVAL_MINUTES && interval <= MAXIMUM_TIMER_INTERVAL_MINUTES) {
+								measurementIntervalMins = interval;
+								measurementIntervalMinsUpdated = true;
+
+								APP_LOG(TS_OFF, VLEVEL_M, "Received measurementIntervalMins: %d\r\n", measurementIntervalMins);
+							}
+
+							break;
+						}
+						case LORA_SEND_MEASURMENTS_AFTER: {
+							uint8_t numberOfMeasurements = appData->Buffer[1];
+
+							if (numberOfMeasurements >= MINIMUM_SEND_MEASUREMENTS_AFTER && numberOfMeasurements <= MAXIMUM_SEND_MEASUREMENTS_AFTER) {
+								sendMeasurementsAfterNumber = numberOfMeasurements;
+								sendMeasurementsAfterNumberUpdated = true;
+
+								APP_LOG(TS_OFF, VLEVEL_M, "Received sendMeasurementsAfterNumber: %d\r\n", sendMeasurementsAfterNumber);
+							}
+
+							break;
+						}
+					}
+				}
+
+				break;
             default:
-
-              break;
+            	break;
           }
         }
       }
@@ -534,64 +525,22 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
   /* USER CODE END OnRxData_1 */
 }
 
-uint8_t SendTxData(const char *waterLevel, const char *waterTemp, const char *waterEC, const char *waterSalinity, const char *waterTDS, const char *sensorBatteryLevel)
+bool SendTxData(const char *measurementExtracted)
 {
 	/* USER CODE BEGIN SendTxData_1 */
-	LmHandlerErrorStatus_t status = LORAMAC_HANDLER_ERROR;
-	//uint8_t batteryLevel = GetBatteryLevel();
-	uint8_t dataCounter = 0;
+	//uint8_t batteryLevel = GetBatteryLevel();					/* 1 (very low) to 254 (fully charged) */
+	uint8_t dataCounter = strlen(measurementExtracted) - 1;
 
-	/* DATE in format ddmmyy */
-	char *ptrBuffer = strstr(waterLevel, "K28");	/* K28 is for date */
-	for (uint8_t i = 4; i <= 11; i++) { 			/* Get all date characters and put them in transmit buffer */
-		if (*(ptrBuffer + i) != ' ') {
-			AppData.Buffer[dataCounter++] = *(ptrBuffer + i);
-		}
-	}
-
-	/* TIME in format hhmmss */
-	ptrBuffer = strstr(waterLevel, "K24"); 			/* K24 is for time */
-	for (uint8_t i = 4; i <= 11; i++) { 			/* Get all time characters and put them in transmit buffer */
-		if (*(ptrBuffer + i) != ' ') {
-			AppData.Buffer[dataCounter++] = *(ptrBuffer + i);
-		}
-	}
-
-	/* Extract data from measurement strings */
-	ExtractMeasurements(waterLevel, &dataCounter);
-	ExtractMeasurements(waterTemp, &dataCounter);
-	ExtractMeasurements(waterEC, &dataCounter);
-	ExtractMeasurements(waterSalinity, &dataCounter);
-	ExtractMeasurements(waterTDS, &dataCounter);
-	ExtractMeasurements(sensorBatteryLevel, &dataCounter);
+	strncpy(AppData.Buffer, measurementExtracted, dataCounter);
 
 	//APP_LOG(TS_ON, VLEVEL_M, "VDDA: %d\r\n", batteryLevel);
 
 	AppData.Port = LORAWAN_USER_APP_PORT;
-	//AppData.Buffer[dataCounter++] = GetBatteryLevel();        /* 1 (very low) to 254 (fully charged) */
-
 	AppData.BufferSize = dataCounter;
 
-	/*if ((JoinLedTimer.IsRunning) && (LmHandlerJoinStatus() == LORAMAC_HANDLER_SET))
-	 {
-	 UTIL_TIMER_Stop(&JoinLedTimer);
-	 }*/
-
-	status = LmHandlerSend(&AppData, LmHandlerParams.IsTxConfirmed, false); /* Send data */
-
-	return status; /* return 1 if transmission is successful */
-
+	// Send data
+	return LmHandlerSend(&AppData, LmHandlerParams.IsTxConfirmed, false) == LORAMAC_HANDLER_SUCCESS;
 	/* USER CODE END SendTxData_1 */
-}
-
-static void OnTxTimerEvent(void *context)
-{
-  /* USER CODE BEGIN OnTxTimerEvent_1 */
-
-  /* USER CODE END OnTxTimerEvent_1 */
-
-  /* USER CODE BEGIN OnTxTimerEvent_2 */
-  /* USER CODE END OnTxTimerEvent_2 */
 }
 
 /* USER CODE BEGIN PrFD_LedEvents */

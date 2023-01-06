@@ -31,12 +31,21 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "stdbool.h"
 
+#include "stm32_timer.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+extern bool startMeasurements;
+extern bool readingMeasurements;
 
+extern bool sendData;
+extern bool sendDataTimerRunnning;
+extern bool dataSent;
+
+extern UTIL_TIMER_Object_t SendDataTimer;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/

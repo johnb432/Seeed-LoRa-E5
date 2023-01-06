@@ -33,7 +33,11 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+extern uint32_t measurementIntervalMins;
+extern uint8_t sendMeasurementsAfterNumber;
 
+extern bool measurementIntervalMinsUpdated;
+extern bool sendMeasurementsAfterNumberUpdated;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -134,7 +138,7 @@ extern "C" {
 void LoRaWAN_Init(void);
 
 /* USER CODE BEGIN EFP */
-uint8_t SendTxData(const char *waterLevel, const char *waterTemp, const char *waterEC, const char *waterSalinity, const char *waterTDS, const char *batteryLevel);
+bool SendTxData(const char *measurementExtracted);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus
