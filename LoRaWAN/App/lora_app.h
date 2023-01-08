@@ -34,7 +34,7 @@ extern "C" {
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
 extern uint32_t measurementIntervalMins;
-extern uint8_t sendMeasurementsAfterNumber;
+extern uint16_t sendMeasurementsAfterNumber;
 
 extern bool measurementIntervalMinsUpdated;
 extern bool sendMeasurementsAfterNumberUpdated;
@@ -138,7 +138,7 @@ extern bool sendMeasurementsAfterNumberUpdated;
 void LoRaWAN_Init(void);
 
 /* USER CODE BEGIN EFP */
-bool SendTxData(const char *measurementExtracted);
+bool SendTxData(const uint8_t *measurementExtracted);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus
