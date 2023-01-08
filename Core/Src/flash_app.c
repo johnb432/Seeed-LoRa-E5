@@ -153,7 +153,7 @@ void FlashAppReadUnsentMeasurements(void) {
 
                 // Add measurement to RAM
                 if (!SensorAppAddMeasurementToStorage(measurement, false)) {
-                    break;
+                    return;
                 }
             }
         }

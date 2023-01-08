@@ -47,7 +47,7 @@
 
 /* Parameters ----------------------------------------------------------------*/
 // If you change SIZE_MEASUREMENT, reset flash memory
-#define SIZE_MEASUREMENT                    24 // 3 * 64 bits = 192 bits = 24 bytes
+#define SIZE_MEASUREMENT                    32 // In bytes -> 4x 64 bits
 #define SIZE_STORAGE                        (8 * 24U) // Min: 1, Max: 512
 
 /* Exported functions prototypes ---------------------------------------------*/

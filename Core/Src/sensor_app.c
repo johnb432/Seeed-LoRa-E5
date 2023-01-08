@@ -271,7 +271,8 @@ static void ExtractMeasurementTime(const char *measurementRaw) {
 
     // Storage in little endian (LSB first in buffer)
     // Only 40 bits are required, but additional 8 bits are used as status flags when stored in flash memory
-    for (uint8_t i = 0; i < 6; i++) {
+    // To get SIZE_MEASUREMENT = 32, we fill up 2 additional bytes on top of that (so 64 bits total)
+    for (uint8_t i = 0; i < 8; i++) {
         measurementExtracted[measurementExtractedPointer++] = (uint8_t) (dateAndTime >> (i * 8));
     }
 
@@ -283,12 +284,12 @@ static void ExtractMeasurementTime(const char *measurementRaw) {
  * Extracts measurement values from raw measurement message and converts content binary (for better data compression).
  */
 static void ExtractMeasurementValue(const char *measurementRaw) {
-    uint8_t registerNumber = 0;
-    uint16_t power = 10;
+    uint16_t registerNumber = 0; // 12 bits
+    uint16_t power = 1000;
 
     // K06 is for command
     char *ptrBuffer = strstr(measurementRaw, "K06");
-    for (uint8_t i = 10; i <= 11; i++) {
+    for (uint8_t i = 8; i <= 11; i++) {
         if (*(ptrBuffer + i) != ' ') {
             registerNumber += (*(ptrBuffer + i) - 0x30) * power;
             power /= 10;
@@ -296,10 +297,10 @@ static void ExtractMeasurementValue(const char *measurementRaw) {
     }
 
     // + = 0, - = 1
-    uint8_t sign = *(ptrBuffer + 12) == '-';
-    uint8_t commaPosition = *(ptrBuffer + 11) - 0x30;
+    uint8_t sign = *(ptrBuffer + 12) == '-'; // 1 bit
+    uint8_t commaPosition = *(ptrBuffer + 11) - 0x30; // 3 bits
 
-    uint16_t value = 0;
+    uint16_t value = 0; // 16 bits
     power = 10000;
 
     // K20 is for data
@@ -311,12 +312,11 @@ static void ExtractMeasurementValue(const char *measurementRaw) {
         }
     }
 
-    // 32 bit, but only requires 24 bits
-    uint32_t measurementHeader = (registerNumber << 4) + (commaPosition << 1) + sign;
-    uint32_t measurement = value + (measurementHeader << 16);
+    uint32_t measurementHeader = (registerNumber << 4) + (commaPosition << 1) + sign; // 16 bits used
+    uint32_t measurement = value + (measurementHeader << 16); // 32 bits used
 
-    // LSB first in buffer (only add 24 bits into buffer)
-    for (uint8_t i = 0; i < 3; i++) {
+    // LSB first in buffer
+    for (uint8_t i = 0; i < 4; i++) {
         measurementExtracted[measurementExtractedPointer++] = (uint8_t) (measurement >> (i * 8));
     }
 }
