@@ -181,7 +181,7 @@ bool SensorAppAddMeasurementToStorage(const uint8_t *measurement, const bool add
     }
 
     // Allocate memory for new array
-    uint8_t *storedMeasurement = (uint8_t*) calloc(SIZE_MEASUREMENT, sizeof(uint8_t*));
+    uint8_t *storedMeasurement = (uint8_t*) calloc(SIZE_MEASUREMENT, sizeof(uint8_t));
 
     // If memory can't be allocated
     if (storedMeasurement == NULL) {
@@ -190,8 +190,7 @@ bool SensorAppAddMeasurementToStorage(const uint8_t *measurement, const bool add
     }
 
     // Copy measurement into storedMeasurement
-    uint16_t size = sizeof(measurement);
-    memcpy(storedMeasurement, measurement, size);
+    memcpy(storedMeasurement, measurement, SIZE_MEASUREMENT);
 
     measurementRAMStorage[measurementStoragePointer] = storedMeasurement;
 
@@ -296,6 +295,9 @@ static void ExtractMeasurementValue(const char *measurementRaw) {
         }
     }
 
+    // K20 is for data
+    ptrBuffer = strstr(measurementRaw, "K20");
+
     // + = 0, - = 1
     uint8_t sign = *(ptrBuffer + 12) == '-'; // 1 bit
     uint8_t commaPosition = *(ptrBuffer + 11) - 0x30; // 3 bits
@@ -303,8 +305,6 @@ static void ExtractMeasurementValue(const char *measurementRaw) {
     uint16_t value = 0; // 16 bits
     power = 10000;
 
-    // K20 is for data
-    ptrBuffer = strstr(measurementRaw, "K20");
     for (uint8_t i = 13; i <= 17; i++) {
         if (*(ptrBuffer + i) != ' ') {
             value += (*(ptrBuffer + i) - 0x30) * power;

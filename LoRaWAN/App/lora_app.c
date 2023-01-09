@@ -100,7 +100,7 @@ static const char *slotStrings[] = { "1", "2", "C", "C_MC", "P", "P_MC" };
 /**
  * @brief  LoRa End Node send request
  */
-bool SendTxData(const uint8_t *measurementExtracted);
+bool SendTxData(const uint8_t *measurement);
 
 /**
  * @brief  join event callback function
@@ -521,15 +521,14 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params) {
     /* USER CODE END OnRxData_1 */
 }
 
-bool SendTxData(const uint8_t *measurementExtracted) {
+bool SendTxData(const uint8_t *measurement) {
     /* USER CODE BEGIN SendTxData_1 */
     //uint8_t batteryLevel = GetBatteryLevel();					/* 1 (very low) to 254 (fully charged) */
-    uint8_t dataCounter = sizeof(measurementExtracted) - 1;
 
-    memcpy(AppData.Buffer, measurementExtracted, dataCounter);
+    memcpy(AppData.Buffer, measurement, SIZE_MEASUREMENT);
 
     AppData.Port = LORAWAN_USER_APP_PORT;
-    AppData.BufferSize = dataCounter;
+    AppData.BufferSize = SIZE_MEASUREMENT;
 
     // Send data
     return LmHandlerSend(&AppData, LmHandlerParams.IsTxConfirmed, false) == LORAMAC_HANDLER_SUCCESS;
