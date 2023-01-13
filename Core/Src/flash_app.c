@@ -12,28 +12,28 @@
 #include "flash_app.h"
 
 /* Private function prototypes -----------------------------------------------*/
-static uint32_t FlashAppWriteData(uint32_t address, uint64_t *data, uint16_t size);
-static void FlashAppReadData(uint32_t address, uint64_t *rxBuffer, uint16_t size);
-static uint32_t FlashAppErasePage(const uint16_t page);
-
 static uint32_t FlashAppFindConfig(uint32_t address);
 static uint32_t FlashAppFindFreeSpotConfig(uint32_t address);
 
-static uint32_t FlashAppFindFreeSpotMeasurement(uint32_t startAddress);
 static bool FlashAppHasMeasurementBeenSent(const uint32_t address);
-static void FlashAppReadMeasurement(const uint32_t address, uint64_t *rxBuffer);
+static uint32_t FlashAppFindFreeSpotMeasurement(uint32_t startAddress);
+
+static uint32_t FlashAppWriteData(uint32_t address, uint64_t *data, uint16_t size);
+static void FlashAppReadData(uint32_t address, uint64_t *rxBuffer, uint16_t size);
+static uint32_t FlashAppErasePage(const uint16_t page);
+static bool FlashAppIsPageReadyToBeErased(const uint16_t page);
 
 /* Exported functions --------------------------------------------------------*/
-static uint32_t flashAddressCurrentConfig = FLASH_START_ADDRESS_CONFIG;
-static uint32_t flashAddressNextFreeConfig = FLASH_START_ADDRESS_CONFIG;
+static uint32_t Flash_addressCurrentConfig = FLASH_START_ADDRESS_CONFIG;
+static uint32_t Flash_addressNextFreeConfig = FLASH_START_ADDRESS_CONFIG;
 
 void FlashAppReadConfig(CONFIG_TYPE *config) {
     APP_LOG(TS_OFF, VLEVEL_M, "Reading config start\r\n");
 
     // Go through entire memory page to find where the config is stored
-    flashAddressCurrentConfig = FlashAppFindConfig(flashAddressCurrentConfig);
+    Flash_addressCurrentConfig = FlashAppFindConfig(Flash_addressCurrentConfig);
 
-    uint32_t address = flashAddressCurrentConfig;
+    uint32_t address = Flash_addressCurrentConfig;
     uint8_t size = CONFIG_SIZE;
 
     // Get config data
@@ -42,13 +42,12 @@ void FlashAppReadConfig(CONFIG_TYPE *config) {
         *config++ = *(__IO CONFIG_TYPE*) address;
 
         if ((--size) == 0) {
+            APP_LOG(TS_OFF, VLEVEL_M, "Reading config done | Config address: %d\r\n", Flash_addressCurrentConfig);
             return;
         }
 
-        address += CONFIG_TYPE_SIZE;
+        address += CONFIG_TYPE_SIZE_BYTES;
     }
-
-    APP_LOG(TS_OFF, VLEVEL_M, "Reading config done | Config address: %d\r\n", flashAddressCurrentConfig);
 }
 
 /*
@@ -65,11 +64,12 @@ bool FlashAppWriteConfig(CONFIG_TYPE *config) {
 
     // Compare old config with new one (Little endian)
     for (uint16_t i = 0; i < CONFIG_SIZE; i++) {
-        if (!changesFound && config[i] != currentConfig[i]) {
+        if (!changesFound && (config[i] != currentConfig[i])) {
             changesFound = true;
         }
 
-        dataToWrite += ((uint64_t) config[i]) << (i * CONFIG_TYPE_SIZE);
+        // Get data to write
+        dataToWrite += ((uint64_t) config[i]) << (i * (CONFIG_TYPE_SIZE_BYTES * 8));
     }
 
     // If existing config is the same as the new one, ignore
@@ -78,7 +78,7 @@ bool FlashAppWriteConfig(CONFIG_TYPE *config) {
     }
 
     // Go to next address
-    flashAddressNextFreeConfig = FlashAppFindFreeSpotConfig(flashAddressNextFreeConfig);
+    Flash_addressNextFreeConfig = FlashAppFindFreeSpotConfig(Flash_addressNextFreeConfig);
 
     uint8_t errors = 0;
 
@@ -86,7 +86,7 @@ bool FlashAppWriteConfig(CONFIG_TYPE *config) {
     HAL_FLASH_Unlock();
 
     // Program the user Flash area double word by double word
-    while (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, flashAddressNextFreeConfig, dataToWrite) != HAL_OK) {
+    while (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, Flash_addressNextFreeConfig, dataToWrite) != HAL_OK) {
         // If 3 errors have occurred whilst trying to write to memory, abort
         if (++errors == 3) {
             return false;
@@ -104,16 +104,12 @@ bool FlashAppWriteConfig(CONFIG_TYPE *config) {
  * When flash memory is reset, it's set to 1. Once a cell is set to 0, it can't be set to 1 unless its erased.
  */
 void FlashAppMeasurementHasBeenSent(const uint32_t address) {
-    static uint64_t rxBuffer[1];
+    static uint64_t rxBuffer[1] = {0};
 
-    // Read first 8 bytes
-    FlashAppReadData(address, rxBuffer, 1);
+    // Write status flag 64-bits 0
+    uint32_t status = FlashAppWriteData(MEASUREMENT_STATUS_ADDRESS(address), rxBuffer, 1);
 
-    // Remove status flag (see FLASH_MEMORY_STATUS_FLAG_BYTE)
-    *rxBuffer = FLASH_MEMORY_STATUS_FLAG_REMOVAL_MASK & *rxBuffer;
-
-    // Rewrite data
-    FlashAppWriteData(address, rxBuffer, 1);
+    APP_LOG(TS_OFF, VLEVEL_M, "Measurement has been sent: %d | %d\r\n", FlashAppHasMeasurementBeenSent(address), status);
 }
 
 /*
@@ -122,14 +118,14 @@ void FlashAppMeasurementHasBeenSent(const uint32_t address) {
 void FlashAppReadUnsentMeasurements(void) {
     uint32_t address;
     static uint64_t rxBuffer[4];
-    static uint8_t measurement[SIZE_MEASUREMENT];
+    static uint8_t measurement[MEASUREMENT_SIZE_BYTES];
     uint8_t measurementPointer = 0;
 
     // Go through the entire measurement flash storage
     for (uint16_t page = FLASH_START_PAGE_MEASUREMENTS; page <= FLASH_END_PAGE_MEASUREMENTS; page++) {
         address = FLASH_PAGE_START_ADDRESS(page);
 
-        for (uint32_t endAddress = address + BYTES_USED_PER_PAGE; address < endAddress; address += SIZE_MEASUREMENT) {
+        for (uint32_t endAddress = address + BYTES_USED_PER_PAGE; address < endAddress; address += (MEASUREMENT_SIZE_BYTES + MEASUREMENT_STATUS_SIZE_BYTES)) {
             // Check if current double word length memory content is empty (64 bits set to 1)
             if ((~(*(__IO uint64_t*) address)) == 0) {
                 continue;
@@ -138,7 +134,7 @@ void FlashAppReadUnsentMeasurements(void) {
             // Check if the measurement has already been sent and if it's already been added into RAM
             if (!FlashAppHasMeasurementBeenSent(address) && !SensorAppIsMeasurementInRAM(address)) {
                 // Get the measurement value
-                FlashAppReadMeasurement(address, rxBuffer);
+                FlashAppReadData(address, rxBuffer, MEASUREMENT_SIZE_BYTES / 8);
 
                 APP_LOG(TS_OFF, VLEVEL_M, "Read unsent measurement at: %d\r\n", address);
 
@@ -152,12 +148,96 @@ void FlashAppReadUnsentMeasurements(void) {
                 }
 
                 // Add measurement to RAM
-                if (!SensorAppAddMeasurementToStorage(measurement, false)) {
+                // If it fails, do not continue
+                if (!SensorAppAddMeasurementToStorage(measurement, false, address)) {
                     return;
                 }
             }
         }
     }
+}
+
+/*
+ * Write given data into flash.
+ */
+uint32_t FlashAppWriteMeasurement(uint8_t *data) {
+    static uint32_t measurementFlashAddress = FLASH_START_ADDRESS_MEASUREMENTS;
+
+    uint32_t status = FlashAppFindFreeSpotMeasurement(measurementFlashAddress);
+
+    switch (status) {
+        // If there is not enough space anymore, clear a page
+        case FLASH_MEMORY_STATUS_CLEAR_MEMORY: {
+            bool pageErased = false;
+
+            // Erase pages if possible
+            for (uint16_t page = FLASH_START_PAGE_MEASUREMENTS; page <= FLASH_END_PAGE_MEASUREMENTS; page++) {
+                if (FlashAppIsPageReadyToBeErased(page)) {
+                    FlashAppErasePage(page);
+
+                    // Reset config pointer to a valid pointer
+                    if (!pageErased) {
+                        pageErased = true;
+                        measurementFlashAddress = FLASH_PAGE_START_ADDRESS(page);
+                    }
+                }
+            }
+
+            // Flash memory is full and couldn't be reset
+            if (!pageErased) {
+                APP_LOG(TS_OFF, VLEVEL_M, "Flash memory is full and can't be cleared!!!\r\n");
+                return FLASH_MEMORY_ERROR_COULD_NOT_CLEAR;
+            }
+
+            break;
+        }
+        case FLASH_MEMORY_STATUS_INVALID_ADDRESS: {
+            return FLASH_MEMORY_ERROR_INVALID_ADDRESS;
+        }
+        default: {
+            measurementFlashAddress = status;
+
+            break;
+        }
+    }
+
+    uint32_t startAddress = measurementFlashAddress;
+    uint64_t dataToWrite;
+    uint8_t errors = 0;
+
+    /* Unlock the Flash to enable the flash control register access *************/
+    HAL_FLASH_Unlock();
+
+    // Write 8 Bytes at a time
+    for (uint16_t i = 0; i < MEASUREMENT_SIZE_BYTES; i += 8) {
+        dataToWrite = 0;
+
+        // Group 8 bytes into one 64 bit value
+        for (uint8_t j = 0; j < 8; j++) {
+            dataToWrite += ((uint64_t) *(data + i + j)) << (j * 8);
+        }
+
+        while (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, measurementFlashAddress, dataToWrite) != HAL_OK) {
+            // If 3 errors have occurred whilst trying to write to memory, abort
+            if (++errors == 3) {
+                return HAL_FLASH_GetError();
+            }
+        }
+
+        errors = 0;
+        measurementFlashAddress += 8;
+    }
+
+    // Leave space for status (64-bit number)
+    measurementFlashAddress += MEASUREMENT_STATUS_SIZE_BYTES;
+
+    /* Lock the Flash to disable the flash control register access (recommended
+     to protect the FLASH memory against possible unwanted operation) *********/
+    HAL_FLASH_Lock();
+
+    APP_LOG(TS_OFF, VLEVEL_M, "Measurement address: %d - %d\r\n", startAddress, measurementFlashAddress);
+
+    return startAddress;
 }
 
 /* Private Functions Definition -----------------------------------------------*/
@@ -202,50 +282,17 @@ static uint32_t FlashAppFindFreeSpotConfig(uint32_t address) {
 }
 
 /*
- * Read a measurement from flash.
- */
-static void FlashAppReadMeasurement(const uint32_t address, uint64_t *rxBuffer) {
-    FlashAppReadData(address, rxBuffer, SIZE_MEASUREMENT / 8);
-
-    // Remove status flag (see FLASH_MEMORY_STATUS_FLAG_BYTE)
-    *rxBuffer = FLASH_MEMORY_STATUS_FLAG_REMOVAL_MASK & *rxBuffer;
-
-    return;
-}
-
-/*
  * Returns if a measurement has been sent or not.
  */
 static bool FlashAppHasMeasurementBeenSent(const uint32_t address) {
     // Measurement has been marked as sent if status flags have been set to 0
-    return ((*(__IO uint8_t*) (address + FLASH_MEMORY_STATUS_FLAG_BYTE)) == 0);
-}
-
-/*
- * Check page if all data is ready to be erased.
- * Not all bytes are used (see BYTES_USED_PER_PAGE).
- */
-static bool FlashAppIsPageReadyToBeErased(const uint16_t page) {
-    uint32_t address = FLASH_PAGE_START_ADDRESS(page);
-
-    for (uint32_t endAddress = address + BYTES_USED_PER_PAGE; address < endAddress; address += SIZE_MEASUREMENT) {
-        if (!FlashAppHasMeasurementBeenSent(address)) {
-            return false;
-        }
-    }
-
-    return true;
+    return ((*(__IO uint64_t*) MEASUREMENT_STATUS_ADDRESS(address)) == 0);
 }
 
 /*
  * Finds a spot within the flash to write an entire measurement.
  */
 static uint32_t FlashAppFindFreeSpotMeasurement(uint32_t startAddress) {
-    // Throw error if invalid memory address
-    if (startAddress % 8) {
-        return FLASH_MEMORY_STATUS_INVALID_ADDRESS;
-    }
-
     uint16_t page = (startAddress - FLASH_BASE) / FLASH_PAGE_SIZE;
     uint32_t address = startAddress;
     bool overflow = false;
@@ -272,91 +319,8 @@ static uint32_t FlashAppFindFreeSpotMeasurement(uint32_t startAddress) {
             return FLASH_MEMORY_STATUS_CLEAR_MEMORY;
         }
 
-        address += SIZE_MEASUREMENT;
+        address += (MEASUREMENT_SIZE_BYTES + MEASUREMENT_STATUS_SIZE_BYTES);
     }
-}
-
-/*
- * Write given data into flash.
- */
-uint32_t FlashAppWriteMeasurement(uint8_t *data) {
-    static uint32_t measurementFlashAddress = FLASH_START_ADDRESS_MEASUREMENTS;
-
-    uint32_t status = FlashAppFindFreeSpotMeasurement(measurementFlashAddress);
-
-    switch (status) {
-        // If there is not enough space anymore, clear a page
-        case FLASH_MEMORY_STATUS_CLEAR_MEMORY: {
-            bool pageErased = false;
-
-            // Erase pages if possible
-            for (uint16_t page = FLASH_START_PAGE_MEASUREMENTS; page <= FLASH_END_PAGE_MEASUREMENTS; page++) {
-                if (FlashAppIsPageReadyToBeErased(page)) {
-                    FlashAppErasePage(page);
-
-                    // Reset config pointer to a valid pointer
-                    if (!pageErased) {
-                        pageErased = true;
-                        measurementFlashAddress = FLASH_PAGE_START_ADDRESS(page);
-                    }
-                }
-            }
-
-            // Flash memory is full and couldn't be reset
-            if (!pageErased) {
-                APP_LOG(TS_OFF, VLEVEL_M, "Flash memory is full and can't be cleared!!!\r\n");
-                return FLASH_MEMORY_ERROR_COULD_NOT_CLEAR;
-            }
-
-            break;
-        }
-        case FLASH_MEMORY_STATUS_INVALID_ADDRESS: {
-            return FLASH_MEMORY_ERROR_INVALID_ADDRESS;
-        }
-        default: {
-            measurementFlashAddress = status;
-        }
-    }
-
-    uint32_t startAddress = measurementFlashAddress;
-    uint64_t dataToWrite;
-    uint8_t errors = 0;
-
-    /* Unlock the Flash to enable the flash control register access *************/
-    HAL_FLASH_Unlock();
-
-    // Write 8 Bytes at a time
-    for (uint16_t i = 0; i < SIZE_MEASUREMENT; i += 8) {
-        dataToWrite = 0;
-
-        // Group 8 bytes into one 64 bit value
-        for (uint8_t j = 0; j < 8; j++) {
-            // 6th byte of time and date: Set to 0xFF as flag
-            if (i == 0 && j == FLASH_MEMORY_STATUS_FLAG_BYTE) {
-                dataToWrite += 0xFF << (j * 8);
-            } else {
-                dataToWrite += ((uint64_t) *(data + i + j)) << (j * 8);
-            }
-        }
-
-        while (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, measurementFlashAddress, dataToWrite) != HAL_OK) {
-            // If 3 errors have occurred whilst trying to write to memory, abort
-            if (++errors == 3) {
-                return HAL_FLASH_GetError();
-            }
-        }
-
-        errors = 0;
-        measurementFlashAddress += 8;
-    }
-
-    /* Lock the Flash to disable the flash control register access (recommended
-     to protect the FLASH memory against possible unwanted operation) *********/
-    HAL_FLASH_Lock();
-
-    APP_LOG(TS_OFF, VLEVEL_M, "Measurement address: %d\r\n", measurementFlashAddress);
-
-    return startAddress;
 }
 
 /*
@@ -436,4 +400,20 @@ static uint32_t FlashAppErasePage(const uint16_t page) {
     APP_LOG(TS_OFF, VLEVEL_M, "Page %d erased: %d\r\n", page, errorStatus);
 
     return errorStatus;
+}
+
+/*
+ * Check page if all data is ready to be erased.
+ * Not all bytes are used (see BYTES_USED_PER_PAGE).
+ */
+static bool FlashAppIsPageReadyToBeErased(const uint16_t page) {
+    uint32_t address = FLASH_PAGE_START_ADDRESS(page);
+
+    for (uint32_t endAddress = address + BYTES_USED_PER_PAGE; address < endAddress; address += (MEASUREMENT_SIZE_BYTES + MEASUREMENT_STATUS_SIZE_BYTES)) {
+        if (!FlashAppHasMeasurementBeenSent(address)) {
+            return false;
+        }
+    }
+
+    return true;
 }

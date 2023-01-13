@@ -274,9 +274,6 @@ static void ExtractMeasurementTime(const char *measurementRaw) {
     for (uint8_t i = 0; i < 8; i++) {
         measurementExtracted[measurementExtractedPointer++] = (uint8_t) (dateAndTime >> (i * 8));
     }
-
-    // Returns correct value, APP_LOG doesn't put it correctly in string
-    APP_LOG(TS_OFF, VLEVEL_M, "Date and time: %d\r\n", dateAndTime);
 }
 
 /*
@@ -394,6 +391,8 @@ void SensorAppWriteConfig(void) {
         // Restart timer, with new period
         UTIL_TIMER_StartWithPeriod(&MeasurementTimer, measurementIntervalMins * MINUTE);
 
+        APP_LOG(TS_OFF, VLEVEL_M, "Updated timer: %d\r\n", elapsedTime);
+
         // Load old timer value
         MeasurementTimer.Timestamp = elapsedTime;
 
@@ -409,7 +408,7 @@ void SensorAppWriteConfig(void) {
         measurementIntervalMinsUpdated = false;
         sendMeasurementsAfterNumberUpdated = false;
 
-        uint32_t configData[2] = { measurementIntervalMins, sendMeasurementsAfterNumber };
+        CONFIG_TYPE configData[CONFIG_SIZE] = { measurementIntervalMins, sendMeasurementsAfterNumber };
 
         // Write to flash memory
         FlashAppWriteConfig(configData);
@@ -420,7 +419,7 @@ void SensorAppWriteConfig(void) {
  * Reads config and sets affected values.
  */
 void SensorAppReadConfig(void) {
-    uint32_t configData[CONFIG_SIZE];
+    static CONFIG_TYPE configData[CONFIG_SIZE];
 
     // Get config data
     FlashAppReadConfig(configData);

@@ -108,34 +108,33 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
         // Take measurements
-        if (startMeasurements) {
+        if (IRDA_startMeasurements) {
             // Pause LoRa while taking measurements
             if (LmHandlerJoinStatus()) {
                 SensorAppLoRaDisconnect();
             } else {
                 SensorAppReadMeasurementsInit();
 
-                while (readingMeasurements) {
+                while (IRDA_readingMeasurements) {
                     SensorAppReadMeasurements();
                 }
             }
         }
 
         // If not connected, join, then send data
-        if (sendData && SensorAppLoRaJoin()) {
+        if (LoRa_sendData && SensorAppLoRaJoin()) {
             SensorAppLoRaSend();
         }
 
         // After having sent the data, disconnect
-        if (dataSent && SensorAppLoRaDisconnect()) {
-            dataSent = false;
+        if (LoRa_dataSent && SensorAppLoRaDisconnect()) {
+            LoRa_dataSent = false;
 
             // Update the config if necessary
             SensorAppWriteConfig();
 
-            // Enter low power mode upon disconnect
+            // Enter low power mode
             HAL_PWR_EnableSleepOnExit();
-
             PWR_EnterSleepMode();
         }
     }
@@ -201,6 +200,8 @@ void SystemClock_Config(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
+    APP_LOG(TS_ON, VLEVEL_L, "Error_Handler\r\n");
+
     /* User can add his own implementation to report the HAL error return state */
     __disable_irq();
     while (1) {

@@ -32,6 +32,9 @@
 
 #define MINUTE                              60000U
 
+#define BATTERY_REGISTER_NUMBER             1
+#define BATTERY_COMMA_POSITION              3
+
 // LoRa received message encoding
 #define LORA_TIMER_INTERVAL_MINS            1
 #define LORA_SEND_MEASURMENTS_AFTER         2
@@ -42,8 +45,10 @@
 #define MINIMUM_SEND_MEASUREMENTS_AFTER     1
 #define MAXIMUM_SEND_MEASUREMENTS_AFTER     (SIZE_STORAGE / 2)
 
+// CONFIG_SIZE * CONFIG_TYPE_SIZE = a multiple of 64
 #define CONFIG_SIZE                         2
-#define CONFIG_TYPE_SIZE                    32
+#define CONFIG_TYPE                         uint32_t
+#define CONFIG_TYPE_SIZE                    sizeof(CONFIG_TYPE)
 
 /* Parameters ----------------------------------------------------------------*/
 // If you change SIZE_MEASUREMENT, reset flash memory

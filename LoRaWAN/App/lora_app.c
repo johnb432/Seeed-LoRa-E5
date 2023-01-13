@@ -439,6 +439,7 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
         if (params->IsMcpsIndication) {
             if (appData != NULL) {
                 RxPort = appData->Port;
+
                 if (appData->Buffer != NULL) {
                     switch (appData->Port) {
                         case LORAWAN_SWITCH_CLASS_PORT:
@@ -463,6 +464,11 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
                             }
                             break;
                         case LORAWAN_USER_APP_PORT: {
+                            // If length is not a multiple of 5 Bytes (4 for measurement, 1 for ID)
+                            if (appData->BufferSize % (CONFIG_TYPE_SIZE_BYTES + 1)) {
+                                break;
+                            }
+
                             // Little endian
                             for (uint8_t i = 0; i < appData->BufferSize; i+=5) {
                                 switch (appData->Buffer[i]) {
@@ -471,11 +477,11 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 
                                         // Group 4 bytes into one 32 bit value
                                         for (uint8_t j = 0; j < 4; j++) {
-                                            content += ((uint32_t) (appData->Buffer[i + j + 1])) << (j * 8);
+                                            content += ((uint32_t) (appData->Buffer[(i + 1) + j])) << (j * 8);
                                         }
 
                                         // Make sure new settings are valid
-                                        if (content >= MINIMUM_TIMER_INTERVAL_MINUTES && content <= MAXIMUM_TIMER_INTERVAL_MINUTES) {
+                                        if ((content >= TIMER_INTERVAL_MINUTES_MINIMUM) && (content <= TIMER_INTERVAL_MINUTES_MAXIMUM)) {
                                             measurementIntervalMins = content;
                                             measurementIntervalMinsUpdated = true;
 
@@ -484,16 +490,16 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 
                                         break;
                                     }
-                                    case LORA_SEND_MEASURMENTS_AFTER: {
+                                    case LORA_SEND_MEASUREMENTS_AFTER: {
                                         uint32_t content = 0;
 
                                         // Group 4 bytes into one 32 bit value
                                         for (uint8_t j = 0; j < 4; j++) {
-                                            content += ((uint32_t) (appData->Buffer[i + j + 1])) << (j * 8);
+                                            content += ((uint32_t) (appData->Buffer[(i + 1) + j])) << (j * 8);
                                         }
 
                                         // Make sure new settings are valid
-                                        if (content >= MINIMUM_SEND_MEASUREMENTS_AFTER && content <= MAXIMUM_SEND_MEASUREMENTS_AFTER) {
+                                        if ((content >= SEND_MEASUREMENTS_AFTER_MINIMUM) && (content <= SEND_MEASUREMENTS_AFTER_MAXIMUM)) {
                                             sendMeasurementsAfterNumber = content;
                                             sendMeasurementsAfterNumberUpdated = true;
 
@@ -521,19 +527,29 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
   /* USER CODE END OnRxData_1 */
 }
 
-bool SendTxData(const uint8_t *measurement)
-{
-  /* USER CODE BEGIN SendTxData_1 */
-    //uint8_t batteryLevel = GetBatteryLevel();					/* 1 (very low) to 254 (fully charged) */
-
-    memcpy(AppData.Buffer, measurement, SIZE_MEASUREMENT);
+bool SendTxData(const uint8_t *measurement) {
+    /* USER CODE BEGIN SendTxData_1 */
+    // Copy measurement into transmission buffer
+    memcpy(AppData.Buffer, measurement, MEASUREMENT_SIZE_BYTES);
 
     AppData.Port = LORAWAN_USER_APP_PORT;
-    AppData.BufferSize = SIZE_MEASUREMENT;
+    AppData.BufferSize = MEASUREMENT_SIZE_BYTES;
+
+    // Get battery level when we are sending measurement, in order to send an up-to-date reading
+    // We do not need to save the battery level on the device
+    uint32_t batteryLevel = SYS_GetBatteryLevel();
+    uint32_t measurementHeader = (BATTERY_REGISTER_NUMBER << 4) + (BATTERY_COMMA_POSITION << 1); // 16 bits used
+    batteryLevel += (measurementHeader << 16); // 32 bits used
+
+    // LSB first in buffer
+    for (uint8_t i = 0; i < 4; i++) {
+        AppData.Buffer[AppData.BufferSize++] = (uint8_t) (batteryLevel >> (i * 8));
+    }
 
     // Send data
+    // Per measurement we send 64 + 6 * 32 + 32 bits = 288 bits = 36 Bytes
     return LmHandlerSend(&AppData, LmHandlerParams.IsTxConfirmed, false) == LORAMAC_HANDLER_SUCCESS;
-  /* USER CODE END SendTxData_1 */
+    /* USER CODE END SendTxData_1 */
 }
 
 /* USER CODE BEGIN PrFD_LedEvents */
@@ -573,7 +589,8 @@ static void OnTxData(LmHandlerTxParams_t *params)
 
             APP_LOG(TS_OFF, VLEVEL_H, " | MSG TYPE:");
             if (params->MsgType == LORAMAC_HANDLER_CONFIRMED_MSG) {
-                APP_LOG(TS_OFF, VLEVEL_H, "CONFIRMED [%s]\r\n", (params->AckReceived != 0) ? "ACK" : "NACK");
+                APP_LOG(TS_OFF, VLEVEL_H, "CONFIRMED [%s]\r\n", params->AckReceived ? "ACK" : "NACK");
+                LoRa_messageAcknowledged = params->AckReceived + 1;
             } else {
                 APP_LOG(TS_OFF, VLEVEL_H, "UNCONFIRMED\r\n");
             }

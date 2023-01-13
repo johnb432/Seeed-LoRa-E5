@@ -38,14 +38,13 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-extern bool startMeasurements;
-extern bool readingMeasurements;
+extern bool IRDA_startMeasurements;
+extern bool IRDA_readingMeasurements;
 
-extern bool sendData;
-extern bool sendDataTimerRunnning;
-extern bool dataSent;
+extern bool LoRa_sendData;
+extern bool LoRa_dataSent;
 
-extern UTIL_TIMER_Object_t SendDataTimer;
+//extern UTIL_TIMER_Object_t SendDataTimer;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/

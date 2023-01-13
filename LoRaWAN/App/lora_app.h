@@ -38,6 +38,8 @@ extern uint16_t sendMeasurementsAfterNumber;
 
 extern bool measurementIntervalMinsUpdated;
 extern bool sendMeasurementsAfterNumberUpdated;
+
+extern uint8_t LoRa_messageAcknowledged;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -75,7 +77,7 @@ extern bool sendMeasurementsAfterNumberUpdated;
 /*!
  * LoRaWAN default confirm state
  */
-#define LORAWAN_DEFAULT_CONFIRMED_MSG_STATE         LORAMAC_HANDLER_UNCONFIRMED_MSG
+#define LORAWAN_DEFAULT_CONFIRMED_MSG_STATE         LORAMAC_HANDLER_CONFIRMED_MSG
 
 /*!
  * LoRaWAN Adaptive Data Rate
