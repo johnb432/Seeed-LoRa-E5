@@ -149,7 +149,7 @@ void FlashAppReadUnsentMeasurements(void) {
 
                 // Add measurement to RAM
                 // If it fails, do not continue
-                if (!SensorAppAddMeasurementToStorage(measurement, false, address)) {
+                if (!SensorAppAddMeasurementToStorage(measurement, address)) {
                     return;
                 }
             }

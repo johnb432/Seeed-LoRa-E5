@@ -406,12 +406,14 @@ void LoRaWAN_Init(void)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
     switch (GPIO_Pin) {
+        /*
         case BUT1_Pin:
             // XXX: always initialized
             if (EventType == TX_ON_EVENT || 1) {
                 UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), CFG_SEQ_Prio_0);
             }
             break;
+        */
         default:
             break;
     }

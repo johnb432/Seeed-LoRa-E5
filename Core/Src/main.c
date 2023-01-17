@@ -95,14 +95,14 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   //MX_LoRaWAN_Init();
-  MX_USART2_IRDA_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   SensorAppInit();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-    while (true) {
+  while (true) {
     /* USER CODE END WHILE */
     //MX_LoRaWAN_Process();
 

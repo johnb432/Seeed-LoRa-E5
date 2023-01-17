@@ -24,13 +24,13 @@
 
 /* USER CODE END 0 */
 
-UART_HandleTypeDef huart1;
-IRDA_HandleTypeDef hirda2;
+IRDA_HandleTypeDef hirda1;
+UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart1_tx;
 
 /* USART1 init function */
 
-void MX_USART1_UART_Init(void)
+void MX_USART1_IRDA_Init(void)
 {
 
   /* USER CODE BEGIN USART1_Init 0 */
@@ -40,30 +40,15 @@ void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 1 */
 
   /* USER CODE END USART1_Init 1 */
-  huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
-  huart1.Init.WordLength = UART_WORDLENGTH_8B;
-  huart1.Init.StopBits = UART_STOPBITS_1;
-  huart1.Init.Parity = UART_PARITY_NONE;
-  huart1.Init.Mode = UART_MODE_TX_RX;
-  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-  huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-  huart1.Init.ClockPrescaler = UART_PRESCALER_DIV1;
-  huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_UARTEx_SetTxFifoThreshold(&huart1, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_UARTEx_SetRxFifoThreshold(&huart1, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_UARTEx_EnableFifoMode(&huart1) != HAL_OK)
+  hirda1.Instance = USART1;
+  hirda1.Init.BaudRate = 57600;
+  hirda1.Init.WordLength = IRDA_WORDLENGTH_8B;
+  hirda1.Init.Parity = IRDA_PARITY_NONE;
+  hirda1.Init.Mode = IRDA_MODE_TX_RX;
+  hirda1.Init.Prescaler = 1;
+  hirda1.Init.PowerMode = IRDA_POWERMODE_NORMAL;
+  hirda1.Init.ClockPrescaler = IRDA_PRESCALER_DIV1;
+  if (HAL_IRDA_Init(&hirda1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -74,7 +59,7 @@ void MX_USART1_UART_Init(void)
 }
 /* USART2 init function */
 
-void MX_USART2_IRDA_Init(void)
+void MX_USART2_UART_Init(void)
 {
 
   /* USER CODE BEGIN USART2_Init 0 */
@@ -84,15 +69,30 @@ void MX_USART2_IRDA_Init(void)
   /* USER CODE BEGIN USART2_Init 1 */
 
   /* USER CODE END USART2_Init 1 */
-  hirda2.Instance = USART2;
-  hirda2.Init.BaudRate = 57600;
-  hirda2.Init.WordLength = IRDA_WORDLENGTH_8B;
-  hirda2.Init.Parity = IRDA_PARITY_NONE;
-  hirda2.Init.Mode = IRDA_MODE_TX_RX;
-  hirda2.Init.Prescaler = 1;
-  hirda2.Init.PowerMode = IRDA_POWERMODE_NORMAL;
-  hirda2.Init.ClockPrescaler = IRDA_PRESCALER_DIV1;
-  if (HAL_IRDA_Init(&hirda2) != HAL_OK)
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart2, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart2, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -102,12 +102,12 @@ void MX_USART2_IRDA_Init(void)
 
 }
 
-void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
+void HAL_IRDA_MspInit(IRDA_HandleTypeDef* irdaHandle)
 {
 
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
-  if(uartHandle->Instance==USART1)
+  if(irdaHandle->Instance==USART1)
   {
   /* USER CODE BEGIN USART1_MspInit 0 */
 
@@ -153,7 +153,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
       Error_Handler();
     }
 
-    __HAL_LINKDMA(uartHandle,hdmatx,hdma_usart1_tx);
+    __HAL_LINKDMA(irdaHandle,hdmatx,hdma_usart1_tx);
 
     /* USART1 interrupt Init */
     HAL_NVIC_SetPriority(USART1_IRQn, 2, 0);
@@ -164,12 +164,12 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
   }
 }
 
-void HAL_IRDA_MspInit(IRDA_HandleTypeDef* irdaHandle)
+void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
 {
 
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
-  if(irdaHandle->Instance==USART2)
+  if(uartHandle->Instance==USART2)
   {
   /* USER CODE BEGIN USART2_MspInit 0 */
 
@@ -208,10 +208,10 @@ void HAL_IRDA_MspInit(IRDA_HandleTypeDef* irdaHandle)
   }
 }
 
-void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
+void HAL_IRDA_MspDeInit(IRDA_HandleTypeDef* irdaHandle)
 {
 
-  if(uartHandle->Instance==USART1)
+  if(irdaHandle->Instance==USART1)
   {
   /* USER CODE BEGIN USART1_MspDeInit 0 */
 
@@ -226,7 +226,7 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
     HAL_GPIO_DeInit(GPIOB, USARTx_RX_Pin|USARTx_TX_Pin);
 
     /* USART1 DMA DeInit */
-    HAL_DMA_DeInit(uartHandle->hdmatx);
+    HAL_DMA_DeInit(irdaHandle->hdmatx);
 
     /* USART1 interrupt Deinit */
     HAL_NVIC_DisableIRQ(USART1_IRQn);
@@ -236,10 +236,10 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
   }
 }
 
-void HAL_IRDA_MspDeInit(IRDA_HandleTypeDef* irdaHandle)
+void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
 {
 
-  if(irdaHandle->Instance==USART2)
+  if(uartHandle->Instance==USART2)
   {
   /* USER CODE BEGIN USART2_MspDeInit 0 */
 
