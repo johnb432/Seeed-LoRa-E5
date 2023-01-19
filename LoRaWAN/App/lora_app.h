@@ -33,11 +33,11 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-extern uint32_t measurementIntervalMins;
-extern uint16_t sendMeasurementsAfterNumber;
+extern uint32_t IRDA_intervalBetweenMeasurements;
+extern uint16_t LoRa_sendMeasurementsAfter;
 
-extern bool measurementIntervalMinsUpdated;
-extern bool sendMeasurementsAfterNumberUpdated;
+extern bool IRDA_intervalBetweenMeasurementsUpdated;
+extern bool LoRa_sendMeasurementsAfterUpdated;
 
 extern uint8_t LoRa_messageAcknowledged;
 /* USER CODE END ET */

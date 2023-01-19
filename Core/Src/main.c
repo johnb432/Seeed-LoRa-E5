@@ -97,6 +97,7 @@ int main(void)
   //MX_LoRaWAN_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+  // Initialise base modules
   SensorAppInit();
   /* USER CODE END 2 */
 
@@ -113,8 +114,10 @@ int main(void)
             if (LmHandlerJoinStatus()) {
                 SensorAppLoRaDisconnect();
             } else {
+                // Initialise modules necessary for taking a measurement with IRDA
                 SensorAppReadMeasurementsInit();
 
+                // Take measurements
                 while (IRDA_readingMeasurements) {
                     SensorAppReadMeasurements();
                 }

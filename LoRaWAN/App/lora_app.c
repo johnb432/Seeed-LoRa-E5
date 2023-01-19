@@ -484,10 +484,10 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 
                                         // Make sure new settings are valid
                                         if ((content >= TIMER_INTERVAL_MINUTES_MINIMUM) && (content <= TIMER_INTERVAL_MINUTES_MAXIMUM)) {
-                                            measurementIntervalMins = content;
-                                            measurementIntervalMinsUpdated = true;
+                                            IRDA_intervalBetweenMeasurements = content;
+                                            IRDA_intervalBetweenMeasurementsUpdated = true;
 
-                                            APP_LOG(TS_OFF, VLEVEL_M, "Received measurementIntervalMins: %d\r\n", measurementIntervalMins);
+                                            APP_LOG(TS_OFF, VLEVEL_M, "Received IRDA_intervalBetweenMeasurements: %d\r\n", IRDA_intervalBetweenMeasurements);
                                         }
 
                                         break;
@@ -502,10 +502,10 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 
                                         // Make sure new settings are valid
                                         if ((content >= SEND_MEASUREMENTS_AFTER_MINIMUM) && (content <= SEND_MEASUREMENTS_AFTER_MAXIMUM)) {
-                                            sendMeasurementsAfterNumber = content;
-                                            sendMeasurementsAfterNumberUpdated = true;
+                                            LoRa_sendMeasurementsAfter = content;
+                                            LoRa_sendMeasurementsAfterUpdated = true;
 
-                                            APP_LOG(TS_OFF, VLEVEL_M, "Received sendMeasurementsAfterNumber: %d\r\n", sendMeasurementsAfterNumber);
+                                            APP_LOG(TS_OFF, VLEVEL_M, "Received LoRa_sendMeasurementsAfter: %d\r\n", LoRa_sendMeasurementsAfter);
                                         }
 
                                         break;

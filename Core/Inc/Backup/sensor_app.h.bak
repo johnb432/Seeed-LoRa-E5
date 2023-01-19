@@ -72,7 +72,7 @@ void SensorAppInit(void);
 void SensorAppReadMeasurementsInit(void);
 void SensorAppReadMeasurements(void);
 bool SensorAppIsMeasurementInRAM(const uint32_t address);
-bool SensorAppAddMeasurementToStorage(const uint8_t *measurement, const bool addToFlash, uint32_t flashAddress);
+bool SensorAppAddMeasurementToStorage(const uint8_t *measurement, uint32_t flashAddress);
 
 void SensorAppLoRaSend(void);
 bool SensorAppLoRaJoin(void);
