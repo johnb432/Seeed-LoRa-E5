@@ -372,7 +372,7 @@ void SensorAppReadMeasurements(void) {
         } else {
             // Not awaited reception handling goes here
             if (rxPointer != 0) {
-                // TODO: What is to be done?
+                // TODO: Error handling needs to be done
             }
         }
 
@@ -636,7 +636,7 @@ bool SensorAppAddMeasurementToStorage(const uint8_t *measurement, uint32_t flash
 
     // If there is no more free space available
     if (index == (uint16_t) -1) {
-        // TODO: Implement countermeasure?
+        // TODO: Implement countermeasure
         APP_LOG(TS_OFF, VLEVEL_M, "Measurement storage is full!!!\r\n");
 
         storageIsFull = true;
@@ -654,7 +654,7 @@ bool SensorAppAddMeasurementToStorage(const uint8_t *measurement, uint32_t flash
 
     // If memory can't be allocated
     if (storedMeasurement == NULL) {
-        // TODO: What do we do if we can't allocate memory?
+        // TODO: Fail to allocate memory needs to be done
         return false;
     }
 
@@ -677,7 +677,7 @@ bool SensorAppAddMeasurementToStorage(const uint8_t *measurement, uint32_t flash
             measurementFlashStorage[measurementStoragePointer] = flashAddress;
         }
     } else {
-        // TODO: What do we do if it has failed to write to flash?
+        // TODO: Fail to write to flash needs to be done
         APP_LOG(TS_OFF, VLEVEL_M, "Failed to write to flash memory!!! %d\r\n", flashAddress);
     }
 
