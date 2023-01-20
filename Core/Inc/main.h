@@ -72,8 +72,8 @@ void Error_Handler(void);
 #define DBG4_GPIO_Port GPIOB
 #define USARTx_RX_Pin GPIO_PIN_7
 #define USARTx_RX_GPIO_Port GPIOB
-#define LED2_Pin GPIO_PIN_5
-#define LED2_GPIO_Port GPIOB
+#define IRDA_SD_Pin GPIO_PIN_5
+#define IRDA_SD_GPIO_Port GPIOB
 #define USARTx_TX_Pin GPIO_PIN_6
 #define USARTx_TX_GPIO_Port GPIOB
 #define RF_CTRL1_Pin GPIO_PIN_4

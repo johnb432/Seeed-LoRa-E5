@@ -32,21 +32,21 @@ static void PauseLoRaTimerCallback(void *context);
 static void ResumeLoRaTimerCallback(void *context);
 
 /* Exported functions --------------------------------------------------------*/
-static IRDA_HandleTypeDef *hirdaInstance;
+static IRDA_HandleTypeDef *IRDA_uartInstance;
 
 // Config parameters (stored in flash memory)
-uint32_t measurementIntervalMins                        = 1;
-uint16_t sendMeasurementsAfterNumber                    = 1;
+uint32_t IRDA_intervalBetweenMeasurements                   = 1;
+uint16_t LoRa_sendMeasurementsAfter                         = 1;
 
-bool measurementIntervalMinsUpdated                     = false;
-bool sendMeasurementsAfterNumberUpdated                 = false;
+bool IRDA_intervalBetweenMeasurementsUpdated                = false;
+bool LoRa_sendMeasurementsAfterUpdated                      = false;
 
 static uint8_t measurementExtracted[MEASUREMENT_SIZE_BYTES] = {0};
 static uint16_t measurementExtractedPointer                 = 0;
 
 // Measurement storage
 static uint8_t *measurementRAMStorage[RAM_STORAGE_SIZE]     = {NULL};   // Stores pointers to measurements in RAM
-static uint32_t measurementFlashStorage[RAM_STORAGE_SIZE]   = {0};      // Stores the addresses of the measurements that are in RAM
+static uint32_t measurementFlashStorage[RAM_STORAGE_SIZE]   = {0};      // Stores the flash addresses of the measurements that are in RAM
 static uint16_t numberOfMeasurementsInStorage               = 0;        // Keeps track of how many measurements are in RAM storage
 
 bool IRDA_startMeasurements                                 = false;
@@ -73,7 +73,7 @@ static bool LoRa_messageSent                                = false;
 static uint32_t LoRa_sendUnconfirmedMessageAfterCounter     = 0;
 static uint8_t LoRa_messageConfirmationFailures             = 0;
 
-static uint8_t message                                  = 0;
+static uint8_t message                                      = 0;
 
 static char rxBuffer[256] = { '\0' };
 static uint8_t rxPointer = 0;
@@ -95,20 +95,20 @@ void SensorAppReadConfig(void) {
     // Get config data
     FlashAppReadConfig(configData);
 
-    APP_LOG(TS_OFF, VLEVEL_M, "measurementIntervalMins from config: %d\r\n", configData[0]);
-    APP_LOG(TS_OFF, VLEVEL_M, "sendMeasurementsAfterNumber from config: %d\r\n", configData[1]);
+    APP_LOG(TS_OFF, VLEVEL_M, "IRDA_intervalBetweenMeasurements from config: %d\r\n", configData[0]);
+    APP_LOG(TS_OFF, VLEVEL_M, "LoRa_sendMeasurementsAfter from config: %d\r\n", configData[1]);
 
     // Make sure config is valid
     if ((configData[0] >= TIMER_INTERVAL_MINUTES_MINIMUM) && (configData[0] <= TIMER_INTERVAL_MINUTES_MAXIMUM)) {
-        measurementIntervalMins = configData[0];
+        IRDA_intervalBetweenMeasurements = configData[0];
     }
 
     if ((configData[1] >= SEND_MEASUREMENTS_AFTER_MINIMUM) && (configData[1] <= SEND_MEASUREMENTS_AFTER_MAXIMUM)) {
-        sendMeasurementsAfterNumber = configData[1];
+        LoRa_sendMeasurementsAfter = configData[1];
     }
 
-    APP_LOG(TS_OFF, VLEVEL_M, "measurementIntervalMins: %d\r\n", measurementIntervalMins);
-    APP_LOG(TS_OFF, VLEVEL_M, "sendMeasurementsAfterNumber: %d\r\n", sendMeasurementsAfterNumber);
+    APP_LOG(TS_OFF, VLEVEL_M, "IRDA_intervalBetweenMeasurements: %d\r\n", IRDA_intervalBetweenMeasurements);
+    APP_LOG(TS_OFF, VLEVEL_M, "LoRa_sendMeasurementsAfter: %d\r\n", LoRa_sendMeasurementsAfter);
 }
 
 /**
@@ -116,9 +116,9 @@ void SensorAppReadConfig(void) {
   *         If there are new values, it writes them to flash.
   */
 void SensorAppWriteConfig(void) {
-    if (measurementIntervalMinsUpdated || sendMeasurementsAfterNumberUpdated) {
+    if (IRDA_intervalBetweenMeasurementsUpdated || LoRa_sendMeasurementsAfterUpdated) {
         // Set new timer value
-        if (measurementIntervalMinsUpdated) {
+        if (IRDA_intervalBetweenMeasurementsUpdated) {
             uint32_t elapsedTime;
 
             // Get remaining time left on current timer
@@ -126,25 +126,25 @@ void SensorAppWriteConfig(void) {
 
             // Restart timer, with new period
             // This means that the next measurement will still be taken with the old interval
-            UTIL_TIMER_StartWithPeriod(&MeasurementTimer, measurementIntervalMins * MINUTE);
+            UTIL_TIMER_StartWithPeriod(&MeasurementTimer, IRDA_intervalBetweenMeasurements * MINUTE);
 
             APP_LOG(TS_OFF, VLEVEL_M, "Updated timer: %d\r\n", elapsedTime);
 
             // Load old timer value
             MeasurementTimer.Timestamp = elapsedTime;
 
-            APP_LOG(TS_OFF, VLEVEL_M, "Updated measurementIntervalMins: %d\r\n", measurementIntervalMins);
+            APP_LOG(TS_OFF, VLEVEL_M, "Updated IRDA_intervalBetweenMeasurements: %d\r\n", IRDA_intervalBetweenMeasurements);
         }
 
         // Set new send after number of measurements
-        if (sendMeasurementsAfterNumberUpdated) {
-            APP_LOG(TS_OFF, VLEVEL_M, "Updated sendMeasurementsAfterNumber: %d\r\n", sendMeasurementsAfterNumber);
+        if (LoRa_sendMeasurementsAfterUpdated) {
+            APP_LOG(TS_OFF, VLEVEL_M, "Updated LoRa_sendMeasurementsAfter: %d\r\n", LoRa_sendMeasurementsAfter);
         }
 
-        measurementIntervalMinsUpdated = false;
-        sendMeasurementsAfterNumberUpdated = false;
+        IRDA_intervalBetweenMeasurementsUpdated = false;
+        LoRa_sendMeasurementsAfterUpdated = false;
 
-        CONFIG_TYPE configData[CONFIG_SIZE] = { measurementIntervalMins, sendMeasurementsAfterNumber };
+        CONFIG_TYPE configData[CONFIG_SIZE] = { IRDA_intervalBetweenMeasurements, LoRa_sendMeasurementsAfter };
 
         // Write to flash memory
         FlashAppWriteConfig(configData);
@@ -166,10 +166,10 @@ void SensorAppInit(void) {
     SensorAppReadConfig();
 
     // Assign chosen IRDA instance
-    hirdaInstance = &hirda1;
+    IRDA_uartInstance = &hirda1;
 
     // Create timers
-    UTIL_TIMER_Create(&MeasurementTimer, measurementIntervalMins * MINUTE, UTIL_TIMER_PERIODIC, StartMeasurementsTimerCallback, NULL);
+    UTIL_TIMER_Create(&MeasurementTimer, IRDA_intervalBetweenMeasurements * MINUTE, UTIL_TIMER_PERIODIC, StartMeasurementsTimerCallback, NULL);
     UTIL_TIMER_Create(&WakeSensorUpTimer, 200, UTIL_TIMER_PERIODIC, WakeSensorUpTimerCallback, NULL);
 
     UTIL_TIMER_Create(&SendDataTimer, 1000, UTIL_TIMER_PERIODIC, SendDataTimerCallback, NULL);
@@ -213,11 +213,14 @@ void SensorAppReadMeasurementsInit(void) {
         UTIL_TIMER_Stop(&ResumeLoRaTimer);
     }
 
+    // Turn on IR transceiver
+    HAL_GPIO_WritePin(GPIOB, IRDA_SD_Pin, GPIO_PIN_RESET);
+
     // Reinit the IRDA module after sleep
     MX_USART1_IRDA_Init();
 
     // Flush the RX and TX buffers
-    __HAL_IRDA_FLUSH_DRREGISTER(&(*hirdaInstance));
+    __HAL_IRDA_FLUSH_DRREGISTER(&(*IRDA_uartInstance));
 
     IRDA_startMeasurements = false;
     APP_LOG(TS_OFF, VLEVEL_M, "Starting measurements\r\n");
@@ -241,7 +244,7 @@ void SensorAppReadMeasurements(void) {
             uint8_t messageSend[] = "A\r";
 
             // Make sure to transmit the wake up message
-            while (HAL_OK != HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 10)) {}
+            while (HAL_OK != HAL_IRDA_Transmit(&(*IRDA_uartInstance), messageSend, sizeof(messageSend) - 1, 10)) {}
         } else if (IRDA_wakeUpCounter >= (150 + 5)) {
             // If it has failed, wait for 30 s (150 * 200 ms), then try to wake up sensor again
             IRDA_wakeUpCounter = 0;
@@ -263,7 +266,7 @@ void SensorAppReadMeasurements(void) {
             uint8_t messageSend[] = "?06\r";
 
             // If checksum failed, ask to resend last transmission
-            while (HAL_OK != HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 10)) {}
+            while (HAL_OK != HAL_IRDA_Transmit(&(*IRDA_uartInstance), messageSend, sizeof(messageSend) - 1, 10)) {}
 
             rxPointer = 0;
 
@@ -278,7 +281,7 @@ void SensorAppReadMeasurements(void) {
             uint8_t messageSend[] = "S\r";
 
             // Open send request
-            HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 50);
+            HAL_IRDA_Transmit(&(*IRDA_uartInstance), messageSend, sizeof(messageSend) - 1, 50);
 
             message = IRDA_MESSAGE_START;
 
@@ -289,7 +292,7 @@ void SensorAppReadMeasurements(void) {
                 case IRDA_MESSAGE_START: {
                     // Send first register value request
                     uint8_t messageSend[] = "F0017G0010\r";
-                    HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 50);
+                    HAL_IRDA_Transmit(&(*IRDA_uartInstance), messageSend, sizeof(messageSend) - 1, 50);
 
                     break;
                 }
@@ -297,13 +300,16 @@ void SensorAppReadMeasurements(void) {
                 case IRDA_MESSAGE_END: {
                     IRDA_readingMeasurements = false;
 
+                    // Turn off IR transceiver
+                    HAL_GPIO_WritePin(GPIOB, IRDA_SD_Pin, GPIO_PIN_SET);
+
                     // Put measurement into storage (both RAM and flash)
                     SensorAppAddMeasurementToStorage(measurementExtracted, 0);
 
                     APP_LOG(TS_OFF, VLEVEL_M, "Finishing measurements | Number of measurements taken: %d\r\n", numberOfMeasurementsInStorage);
 
                     // Check if we should send the measurements over LoRa or not
-                    if (numberOfMeasurementsInStorage >= sendMeasurementsAfterNumber) {
+                    if (numberOfMeasurementsInStorage >= LoRa_sendMeasurementsAfter) {
                         SensorAppLoRaJoinInit();
                     } else {
                         APP_LOG(TS_OFF, VLEVEL_M, "Entering sleep mode\r\n\r\n");
@@ -325,28 +331,28 @@ void SensorAppReadMeasurements(void) {
             uint8_t messageSend[] = "F0017G0020\r";
 
             // Request next register
-            HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 50);
+            HAL_IRDA_Transmit(&(*IRDA_uartInstance), messageSend, sizeof(messageSend) - 1, 50);
         } else if (!strncmp(receivedMessage, "K85 00170020", 12)) { // Received ground water temperature
             SensorAppExtractMeasurementValue(receivedMessage);
 
             uint8_t messageSend[] = "F0017G0030\r";
 
             // Request next register
-            HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 50);
+            HAL_IRDA_Transmit(&(*IRDA_uartInstance), messageSend, sizeof(messageSend) - 1, 50);
         } else if (!strncmp(receivedMessage, "K85 00170030", 12)) { // Received ground water electrical conductivity
             SensorAppExtractMeasurementValue(receivedMessage);
 
             uint8_t messageSend[] = "F0017G0035\r";
 
             // Request next register
-            HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 50);
+            HAL_IRDA_Transmit(&(*IRDA_uartInstance), messageSend, sizeof(messageSend) - 1, 50);
         } else if (!strncmp(receivedMessage, "K85 00170035", 12)) { // Received ground water salinity
             SensorAppExtractMeasurementValue(receivedMessage);
 
             uint8_t messageSend[] = "F0017G0036\r";
 
             // Request next register
-            HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 50);
+            HAL_IRDA_Transmit(&(*IRDA_uartInstance), messageSend, sizeof(messageSend) - 1, 50);
         } else if (!strncmp(receivedMessage, "K85 00170036", 12)) { // Received ground water TDS
             message = IRDA_MESSAGE_END;
 
@@ -355,14 +361,14 @@ void SensorAppReadMeasurements(void) {
             uint8_t messageSend[] = "F0017G0090\r";
 
             // Request last register
-            HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 50);
+            HAL_IRDA_Transmit(&(*IRDA_uartInstance), messageSend, sizeof(messageSend) - 1, 50);
         } else if (!strncmp(receivedMessage, "K85 00170090", 12)) { // Received ground water sensor battery voltage
             SensorAppExtractMeasurementValue(receivedMessage);
 
             uint8_t messageSend[] = "A\r";
 
             // Tell sensor that we are done
-            HAL_IRDA_Transmit(&(*hirdaInstance), messageSend, sizeof(messageSend) - 1, 50);
+            HAL_IRDA_Transmit(&(*IRDA_uartInstance), messageSend, sizeof(messageSend) - 1, 50);
         } else {
             // Not awaited reception handling goes here
             if (rxPointer != 0) {
@@ -797,7 +803,7 @@ static bool SensorAppIRDAReceiveByte(void) {
     static uint8_t reception[1] = { '\0' };
 
     // Receive one byte at a time; Wait for 50 ms to see if anything else has been sent
-    switch (HAL_IRDA_Receive(&(*hirdaInstance), reception, sizeof(reception), 50)) {
+    switch (HAL_IRDA_Receive(&(*IRDA_uartInstance), reception, sizeof(reception), 50)) {
         // If it times out, reception is complete (even if nothing has been received)
         case HAL_TIMEOUT: {
             return true;

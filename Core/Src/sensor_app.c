@@ -213,6 +213,9 @@ void SensorAppReadMeasurementsInit(void) {
         UTIL_TIMER_Stop(&ResumeLoRaTimer);
     }
 
+    // Turn on IR transceiver
+    HAL_GPIO_WritePin(GPIOB, IRDA_SD_Pin, GPIO_PIN_RESET);
+
     // Reinit the IRDA module after sleep
     MX_USART1_IRDA_Init();
 
@@ -296,6 +299,9 @@ void SensorAppReadMeasurements(void) {
                 // Sensors has acknowledged the end of transmission ("A", Abbruch)
                 case IRDA_MESSAGE_END: {
                     IRDA_readingMeasurements = false;
+
+                    // Turn off IR transceiver
+                    HAL_GPIO_WritePin(GPIOB, IRDA_SD_Pin, GPIO_PIN_SET);
 
                     // Put measurement into storage (both RAM and flash)
                     SensorAppAddMeasurementToStorage(measurementExtracted, 0);

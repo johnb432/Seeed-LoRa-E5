@@ -19,7 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "app_lorawan.h"
-#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -94,8 +93,6 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  //MX_LoRaWAN_Init();
-  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   // Initialise base modules
   SensorAppInit();
@@ -104,6 +101,7 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (true) {
+    // We run LoRa on our terms, so we disregard the automatic code generation call
     /* USER CODE END WHILE */
     //MX_LoRaWAN_Process();
 
